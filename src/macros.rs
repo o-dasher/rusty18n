@@ -5,7 +5,7 @@
 // Macro to easily define an i18n resource.
 macro_rules! r {
     (|($($args:pat),*)| $lit:literal) => {
-        Some(I18NDynamicResource:new(|($($args),*)| format!($lit)))
+        Some(I18NDynamicResource::new(|($($args),*)| format!($lit)))
     };
 
     (|$args:ident| $lit:literal) => {

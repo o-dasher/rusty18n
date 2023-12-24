@@ -4,8 +4,12 @@ use std::{collections::HashMap, hash::Hash, str::FromStr};
 use bevy_reflect::{Reflect};
 
 /// This type is used to define a simple i18n resource that does not have any dynamic variables
-/// that shall be captured by thy.
-pub type I18NResource = String;
+/// that shall be captured by thy. R stands for Resource.
+pub type R = String;
+
+/// This type is used to define a dynamic i18n resource that uses argument variables.
+/// DR stands for Dynamic Resource.
+pub type DR<A> = I18NDynamicResource<A>;
 
 fn default_dynamic_resource<A>() -> fn(A) -> String {
     |_args: A| "".to_string()
