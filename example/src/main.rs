@@ -1,12 +1,26 @@
+use rusty18n::{t, I18NAccessible, I18NWrapper};
+
+use crate::i18n::ptbr::i18n_ptbr;
+
 mod i18n;
 
-#[derive(Default)]
-pub enum I18Key {
+#[derive(Default, Clone, Copy, Hash, Eq, PartialEq)]
+pub enum I18NKey {
     #[default]
     US,
     PTBR,
 }
 
 fn main() {
-    println!("Hey, this is an example usage of rusty18n")
+    let locales = I18NWrapper::new(vec![(I18NKey::PTBR, i18n_ptbr)]);
+    let br_locale = locales.get(I18NKey::PTBR);
+
+    let a = 1;
+    let b = 2;
+    let result = a + b;
+
+    let response =
+        t!(br_locale.calculus.answers).access((a.to_string(), b.to_string(), result.to_string()));
+
+    println!("{}", response);
 }

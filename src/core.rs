@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::{collections::HashMap, hash::Hash, str::FromStr};
 
-use bevy_reflect::{Reflect};
+use bevy_reflect::Reflect;
 
 /// This type is used to define a simple i18n resource that does not have any dynamic variables
 /// that shall be captured by thy. R stands for Resource.
@@ -23,7 +23,7 @@ pub struct I18NDynamicResource<A> {
 }
 
 /// A trait to define some kind of structure that should be accessed in some way with provided arguments.
-trait I18NAccessible<'a, A, R> {
+pub trait I18NAccessible<'a, A, R> {
     fn access(&'a self, args: A) -> R;
 }
 
