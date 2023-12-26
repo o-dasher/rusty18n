@@ -4,7 +4,6 @@ pub mod ptbr;
 use nestruct::nest;
 
 nest!(
-    #[derive(Default)]
     I18NUsage {
         greetings: {
             waves: rusty18n::R?

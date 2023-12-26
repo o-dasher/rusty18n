@@ -19,8 +19,10 @@ fn main() {
     let b = 2;
     let result = a + b;
 
-    let response =
+    let response_static = t!(br_locale.greetings.waves);
+    let response_dynamic =
         t!(br_locale.calculus.answers).access((a.to_string(), b.to_string(), result.to_string()));
 
-    println!("{}", response);
+    println!("{}", response_static);
+    println!("{}", response_dynamic);
 }
