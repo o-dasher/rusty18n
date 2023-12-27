@@ -27,8 +27,8 @@ macro_rules! r {
 
 #[macro_export]
 macro_rules! define_i18n {
-    ($base_i18n:ident, $body:tt) => {
-        update::deep_struct_update!($base_i18n::fallback(), $body)
+    ($base_i18n:ident, $($body:tt)*) => {
+        deep_struct_update::update! { $($body)* ..$base_i18n::fallback() }
     };
 }
 

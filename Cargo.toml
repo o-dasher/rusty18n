@@ -7,10 +7,9 @@ edition = "2021"
 
 [dependencies]
 bevy_reflect = "0.12.1"
-update = { path = "./update"}
+deep-struct-update = "0.1.0"
 
 [workspace]
 members = [
     "example",
-	"update"
 ]

@@ -114,6 +114,7 @@ impl<K: Eq + Hash + Copy + Default + FromStr> From<Option<&str>> for LocaleKey<K
     }
 }
 
+
 impl<K: Eq + Hash + Copy + Default, V: I18NFallback> I18NWrapper<K, V>
     where
         Self: I18NTrait<Key=K, Value=V>,
