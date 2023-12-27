@@ -3,16 +3,15 @@ use rusty18n::{r, I18NDynamicResource, I18NFallback};
 
 use super::i_18_n_usage::{calculus::Calculus, greetings::Greetings};
 
-// Yeah, i understand this is not ideal... having to specify classes, import them, kind of painful
-// dx to be honest, still good though, but could for sure be improved! Ideally we would have some
-// kind of procedural macro working here that would have as an input the default fallback i18n,
-// automagically placing the class names for you.
 impl I18NFallback for I18NUsage {
     fn fallback() -> Self {
         I18NUsage {
-            greetings: Greetings { waves: r!("Waves") },
+            greetings: Greetings {
+                waves: r!("Waves"),
+                cool: r!("Hey that is cool"),
+            },
             calculus: Calculus {
-                answers: r!(|(a, b, c)| "{a}+{b}={c}"),
+                answers: r!(|(a, b, c)| "{a}+{b}={c} yeah!"),
             },
         }
     }

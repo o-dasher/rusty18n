@@ -6,5 +6,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+merge-struct = "0.1.0"
 nestruct = "0.1.0"
 rusty18n = { path = "../" }
+update = {path = "../update"}
+serde = { version = "1.0.193", features = ["serde_derive"] }

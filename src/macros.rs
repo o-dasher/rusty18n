@@ -26,6 +26,13 @@ macro_rules! r {
 }
 
 #[macro_export]
+macro_rules! define_i18n {
+    ($base_i18n:ident, $body:tt) => {
+        update::deep_struct_update!($base_i18n::fallback(), $body)
+    };
+}
+
+#[macro_export]
 macro_rules! t_prefix {
     ($dollar:tt, $name:ident, $prefix_var:ident $(. $prefix_access:tt)*) => (
         macro_rules! $name {

@@ -1,4 +1,4 @@
-mod en;
+pub mod en;
 pub mod ptbr;
 
 use nestruct::nest;
@@ -6,7 +6,8 @@ use nestruct::nest;
 nest!(
     I18NUsage {
         greetings: {
-            waves: rusty18n::R?
+            waves: rusty18n::R?,
+            cool: rusty18n::R?
         },
         calculus: {
             answers: rusty18n::DR<(String, String, String)>?
