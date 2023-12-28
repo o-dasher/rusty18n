@@ -2,7 +2,10 @@
 name = "rusty18n"
 version = "0.1.0"
 edition = "2021"
+
 repository = "https://github.com/o-dasher/rusty18n.git"
+description = "A simply yet efficient i18n solution for Rust."
+license = "MIT"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
