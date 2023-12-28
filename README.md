@@ -2,15 +2,12 @@
 A pretty simple yet robust library to deal with i18n on Rust.
 
 # Why Rusty18n?
-So, imagine you have an application, lets say a discord bot (yeah, that was my use case).
-I was looking for a simple way to just write i18n resources and use then as i wish, but
-the majority of already stablished solutions required to use yml files, or running something
-at the background. Yes, I am picky, i didn't want that, so i built my own basic solution
-that covers up for my use case. Here every i18n resource is done through code alone, so
-things should be familiar.
+Wouldn't it be pretty useful and handy if you could write all your translations directly in your
+source code? This is what this crate is solving. I was in need of a simple and easy to use i18n
+solution for my discord bot, and I had the idea to create a simple in-memory i18n handler. It
+provides all the basis for what you would expect for an in-memory i18n in Rust, covering simple
+static translations to dynamic ones.
 
 # So how do i start?
-Yeah... i still need to publish this package, so you figure it out yourself!
-
-# But how do i use it?
-You can see an example [here](https://github.com/o-dasher/rusty18n/tree/master/example)
+You just `cargo add rusty18n`. Yeah, simple as that.
+You can see an example usage [here](https://github.com/o-dasher/rusty18n/tree/master/example)
