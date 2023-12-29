@@ -81,20 +81,24 @@ pub struct I18NAccess<L: I18NTrait> {
 
 impl<L: I18NTrait> Clone for I18NAccess<L> {
     fn clone(&self) -> Self {
-        Self { fallback: Arc::clone(&self.fallback), to: Arc::clone(&self.to) }
+        Self {
+            fallback: Arc::clone(&self.fallback),
+            to: Arc::clone(&self.to),
+        }
     }
 }
 
-impl <'a, L: I18NTrait, R> I18NAccessible<'a, fn(&Arc<L::Value>) -> &Option<R>, &'a R> for I18NAccess<L> {
+impl<'a, L: I18NTrait, Resource>
+    I18NAccessible<'a, fn(&Arc<L::Value>) -> &Option<Resource>, &'a Resource> for I18NAccess<L>
+{
     /// Returns the required resource, fallbacks to the fallback implementation in case the resource could not be
     /// found for a given locale.
-    fn access(&'a self, accessing: fn(&Arc<L::Value>) -> &Option<R>) -> &'a R {
+    fn access(&'a self, accessing: fn(&Arc<L::Value>) -> &Option<Resource>) -> &'a Resource {
         accessing(&self.to)
             .as_ref()
             .unwrap_or_else(|| accessing(&self.fallback).as_ref().unwrap())
     }
 }
-
 
 // A NewType wrapper for a locale key with extended capabilities.
 pub struct LocaleKey<K: Eq + Hash + Copy + Default + FromStr>(pub K);
@@ -114,10 +118,9 @@ impl<K: Eq + Hash + Copy + Default + FromStr> From<Option<&str>> for LocaleKey<K
     }
 }
 
-
 impl<K: Eq + Hash + Copy + Default, V: I18NFallback> I18NWrapper<K, V>
-    where
-        Self: I18NTrait<Key=K, Value=V>,
+where
+    Self: I18NTrait<Key = K, Value = V>,
 {
     pub fn new(store: Vec<(K, fn() -> V)>) -> Self {
         let mut store = I18NStore::from(store);
