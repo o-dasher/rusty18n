@@ -12,7 +12,7 @@ pub type R = String;
 pub type DR<A> = I18NDynamicResource<A>;
 
 fn default_dynamic_resource<A>() -> fn(A) -> String {
-    |_args: A| "".to_string()
+    |_args: A| String::new()
 }
 
 #[derive(Reflect, Debug)]
@@ -44,9 +44,12 @@ pub trait I18NFallback {
     fn fallback() -> Self;
 }
 
+pub trait I18NKey = Eq + Hash + Default + Copy;
+pub trait StringI18NKey = I18NKey + FromStr;
+
 /// This trait groups Key, Value types for a given I18N implementation.
 pub trait I18NTrait {
-    type Key: Eq + Hash + Copy + Default;
+    type Key: I18NKey;
     type Value: I18NFallback;
 }
 
@@ -63,11 +66,11 @@ impl<L: I18NTrait, F: Fn() -> L::Value> From<Vec<(L::Key, F)>> for I18NStore<L> 
 
 /// The I18NWrapper wraps over a I18NStore, acting as the middleman to acquire i18n resources.
 #[derive(Debug)]
-pub struct I18NWrapper<K: Eq + Hash + Default + Copy, V: I18NFallback> {
+pub struct I18NWrapper<K: I18NKey, V: I18NFallback> {
     pub store: I18NStore<Self>,
 }
 
-impl<K: Eq + Hash + Copy + Default, V: I18NFallback> I18NTrait for I18NWrapper<K, V> {
+impl<K: I18NKey, V: I18NFallback> I18NTrait for I18NWrapper<K, V> {
     type Key = K;
     type Value = V;
 }
@@ -100,16 +103,17 @@ impl<'a, L: I18NTrait, Resource>
     }
 }
 
-// A NewType wrapper for a locale key with extended capabilities.
-pub struct LocaleKey<K: Eq + Hash + Copy + Default + FromStr>(pub K);
 
-impl<K: Eq + Hash + Copy + Default + FromStr> From<&str> for LocaleKey<K> {
+// A NewType wrapper for a locale key with extended capabilities.
+pub struct LocaleKey<K: StringI18NKey>(pub K);
+
+impl<K: StringI18NKey> From<&str> for LocaleKey<K> {
     fn from(value: &str) -> Self {
         LocaleKey(K::from_str(value).unwrap_or_default())
     }
 }
 
-impl<K: Eq + Hash + Copy + Default + FromStr> From<Option<&str>> for LocaleKey<K> {
+impl<K: StringI18NKey> From<Option<&str>> for LocaleKey<K> {
     fn from(value: Option<&str>) -> Self {
         match value {
             Some(v) => v.into(),
@@ -118,7 +122,7 @@ impl<K: Eq + Hash + Copy + Default + FromStr> From<Option<&str>> for LocaleKey<K
     }
 }
 
-impl<K: Eq + Hash + Copy + Default, V: I18NFallback> I18NWrapper<K, V>
+impl<K: I18NKey, V: I18NFallback> I18NWrapper<K, V>
 where
     Self: I18NTrait<Key = K, Value = V>,
 {

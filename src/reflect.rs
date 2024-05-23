@@ -1,8 +1,7 @@
 use crate::core::{I18NAccess, I18NFallback, I18NTrait};
 use bevy_reflect::{FromReflect, GetPath, Reflect, TypePath};
 
-trait ReflectResource = Reflect + TypePath + FromReflect;
-
+pub trait ReflectResource = Reflect + TypePath + FromReflect;
 pub trait I18NReflected {
     /// Acquires a given resource through a string path. e.g "this.thing.here".
     fn rs<R: ReflectResource>(&self, path: &str) -> Option<&R>;
