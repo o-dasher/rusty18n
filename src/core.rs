@@ -1,16 +1,20 @@
+#[cfg(feature = "bevy_reflect")]
+use bevy_reflect::Reflect;
 use std::{collections::HashMap, hash::Hash};
 
-use bevy_reflect::Reflect;
-
+#[cfg(feature = "bevy_reflect")]
 fn default_dynamic_resource<A>() -> fn(A) -> String {
     |_args: A| String::new()
 }
 
 /// A struct representing an internationalization (i18n) dynamic resource.
-#[derive(Reflect, Debug)]
+#[derive(Debug)]
+#[cfg_attr(feature = "bevy_reflect", derive(Reflect))]
 pub struct I18NDynamicResource<A> {
-    #[reflect(ignore)]
-    #[reflect(default = "default_dynamic_resource")]
+    #[cfg_attr(
+        feature = "bevy_reflect",
+        reflect(ignore, default = "default_dynamic_resource")
+    )]
     /// A function that takes arguments of type `A` and returns a string representing
     /// the localized resource.
     caller: fn(A) -> String,
