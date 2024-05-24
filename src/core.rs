@@ -151,7 +151,6 @@ where
     /// Gets an access object for the specified locale.
     ///
     /// # Arguments
-    ///
     /// * `locale` - The locale for which to retrieve the i18n resource.
     ///
     /// # Returns
