@@ -37,7 +37,7 @@ macro_rules! t_prefix {
     ($dollar:tt, $name:ident, $prefix_var:ident $(. $prefix_access:tt)*) => (
         macro_rules! $name {
             ($dollar($access:tt).*) => (
-                $prefix_var.access(|v| &v$(. $prefix_access)* $dollar(. $access)*)
+                $prefix_var.access(|v| v$(. $prefix_access)* $dollar(. $access)*.as_ref())
             )
         }
     );
@@ -50,6 +50,6 @@ macro_rules! t_prefix {
 #[macro_export]
 macro_rules! t {
     ($var:ident.$($access:tt).*) => {
-        $var.access(|v| &v.$($access).*)
+        $var.access(|v| v.$($access).*.as_ref())
     };
 }

@@ -1,14 +1,11 @@
-use std::{collections::HashMap, hash::Hash, str::FromStr};
+use std::{collections::HashMap, hash::Hash};
 
 use bevy_reflect::Reflect;
 
-/// This type is used to define a simple i18n resource that does not have any dynamic variables
-/// that shall be captured by thy. R stands for Resource.
-pub type R = String;
-
-/// This type is used to define a dynamic i18n resource that uses argument variables.
-/// DR stands for Dynamic Resource.
-pub type DR<A> = I18NDynamicResource<A>;
+/// A trait to define some kind of structure that should be accessed in some way with provided arguments.
+pub trait I18NAccessible<'a, A, R> {
+    fn access(&'a self, args: A) -> R;
+}
 
 fn default_dynamic_resource<A>() -> fn(A) -> String {
     |_args: A| String::new()
@@ -19,11 +16,6 @@ pub struct I18NDynamicResource<A> {
     #[reflect(ignore)]
     #[reflect(default = "default_dynamic_resource")]
     pub caller: fn(A) -> String,
-}
-
-/// A trait to define some kind of structure that should be accessed in some way with provided arguments.
-pub trait I18NAccessible<'a, A, R> {
-    fn access(&'a self, args: A) -> R;
 }
 
 impl<A> I18NDynamicResource<A> {
@@ -44,7 +36,6 @@ pub trait I18NFallback {
 }
 
 pub trait I18NKey = Eq + Hash + Default + Copy;
-pub trait StringI18NKey = I18NKey + FromStr;
 
 /// This trait groups Key, Value types for a given I18N implementation.
 pub trait I18NTrait {
@@ -59,7 +50,7 @@ pub struct I18NStore<L: I18NTrait>(pub HashMap<L::Key, L::Value>);
 
 impl<L: I18NTrait, F: Fn() -> L::Value> From<Vec<(L::Key, F)>> for I18NStore<L> {
     fn from(value: Vec<(L::Key, F)>) -> Self {
-        Self(value.into_iter().map(|(k, v)| (k, v().into())).collect())
+        Self(value.into_iter().map(|(k, v)| (k, v())).collect())
     }
 }
 
@@ -84,8 +75,8 @@ pub struct I18NAccess<'a, L: I18NTrait> {
 impl<L: I18NTrait> Clone for I18NAccess<'_, L> {
     fn clone(&self) -> Self {
         Self {
-            fallback: &self.fallback,
-            to: &self.to,
+            fallback: self.fallback,
+            to: self.to,
         }
     }
 }
@@ -96,25 +87,7 @@ impl<'a, L: I18NTrait, Resource>
     /// Returns the required resource, fallbacks to the fallback implementation in case the resource could not be
     /// found for a given locale.
     fn access(&'a self, accessing: fn(&L::Value) -> Option<&Resource>) -> &'a Resource {
-        accessing(&self.to).unwrap_or_else(|| accessing(&self.fallback).unwrap())
-    }
-}
-
-// A NewType wrapper for a locale key with extended capabilities.
-pub struct LocaleKey<K: StringI18NKey>(pub K);
-
-impl<K: StringI18NKey> From<&str> for LocaleKey<K> {
-    fn from(value: &str) -> Self {
-        LocaleKey(K::from_str(value).unwrap_or_default())
-    }
-}
-
-impl<K: StringI18NKey> From<Option<&str>> for LocaleKey<K> {
-    fn from(value: Option<&str>) -> Self {
-        match value {
-            Some(v) => v.into(),
-            None => LocaleKey(K::default()),
-        }
+        accessing(self.to).unwrap_or_else(|| accessing(self.fallback).unwrap())
     }
 }
 
@@ -125,31 +98,31 @@ where
     pub fn new(store: Vec<(K, fn() -> V)>) -> Self {
         let mut store = I18NStore::from(store);
 
-        store.0.insert(K::default(), V::fallback().into());
+        store.0.insert(K::default(), V::fallback());
 
         Self { store }
     }
 
-    // Returns the i18n implementation of the provided key if it is found.
-    fn ref_opt(&self, locale: &K) -> Option<&V> {
-        self.store.0.get(locale)
-    }
-
     // Returns the fallback i18n implementation.
     fn ref_default(&self) -> &V {
-        self.ref_opt(&K::default()).unwrap()
+        self.ref_opt(K::default()).unwrap()
+    }
+
+    // Returns the i18n implementation of the provided key if it is found.
+    fn ref_opt(&self, locale: K) -> Option<&V> {
+        self.store.0.get(&locale)
     }
 
     // Returns either the provided key i18n implementation or the fallback one if not found.
-    fn ref_any(&self, locale: &K) -> &V {
+    fn ref_any(&self, locale: K) -> &V {
         self.ref_opt(locale).unwrap_or_else(|| self.ref_default())
     }
 
     /// Returns an I18NAccess to a given locale key.
-    pub fn get(&self, locale: impl Into<K>) -> I18NAccess<Self> {
+    pub fn get(&self, locale: K) -> I18NAccess<Self> {
         I18NAccess {
             fallback: self.ref_default(),
-            to: self.ref_any(&locale.into()),
+            to: self.ref_any(locale),
         }
     }
 }
