@@ -46,17 +46,17 @@ pub trait I18NKey = Eq + Hash + Default + Copy;
 
 /// This trait groups Key, Value types for a given I18N implementation.
 pub trait I18NTrait {
-    type Key: I18NKey;
-    type Value: I18NFallback;
+    type K: I18NKey;
+    type V: I18NFallback;
 }
 
 /// The I18NStore wraps a HashMap that maps key value pairs of Locale keys and localized
 /// implementations.
 #[derive(Debug)]
-pub struct I18NStore<L: I18NTrait>(pub HashMap<L::Key, L::Value>);
+pub struct I18NStore<L: I18NTrait>(pub HashMap<L::K, L::V>);
 
-impl<L: I18NTrait, F: Fn() -> L::Value> From<Vec<(L::Key, F)>> for I18NStore<L> {
-    fn from(value: Vec<(L::Key, F)>) -> Self {
+impl<L: I18NTrait, F: Fn() -> L::V> From<Vec<(L::K, F)>> for I18NStore<L> {
+    fn from(value: Vec<(L::K, F)>) -> Self {
         Self(value.into_iter().map(|(k, v)| (k, v())).collect())
     }
 }
@@ -66,11 +66,11 @@ impl<L: I18NTrait, F: Fn() -> L::Value> From<Vec<(L::Key, F)>> for I18NStore<L> 
 /// This struct holds references to both the fallback and target i18n resources.
 /// It allows accessing resources by applying a provided accessor function.
 pub struct I18NAccess<'a, L: I18NTrait> {
-    pub fallback: &'a L::Value,
-    pub to: &'a L::Value,
+    pub fallback: &'a L::V,
+    pub to: &'a L::V,
 }
 
-impl<'a, L: I18NTrait> I18NAccess<'_, L> {
+impl<L: I18NTrait> I18NAccess<'_, L> {
     /// Acquires a resource by applying the provided accessor function.
     ///
     /// This method attempts to access the target resource first and falls back to
@@ -82,7 +82,7 @@ impl<'a, L: I18NTrait> I18NAccess<'_, L> {
     ///
     /// # Returns
     /// A reference to the acquired resource.
-    pub fn acquire<R>(&'a self, accessing: fn(&L::Value) -> Option<&R>) -> &'a R {
+    pub fn acquire<R>(&self, accessing: fn(&L::V) -> Option<&R>) -> &R {
         accessing(self.to).unwrap_or_else(|| accessing(self.fallback).unwrap())
     }
 }
@@ -94,13 +94,13 @@ pub struct I18NWrapper<K: I18NKey, V: I18NFallback> {
 }
 
 impl<K: I18NKey, V: I18NFallback> I18NTrait for I18NWrapper<K, V> {
-    type Key = K;
-    type Value = V;
+    type K = K;
+    type V = V;
 }
 
 impl<K: I18NKey, V: I18NFallback> I18NWrapper<K, V>
 where
-    Self: I18NTrait<Key = K, Value = V>,
+    Self: I18NTrait<K = K, V = V>,
 {
     /// Constructs a new `I18NWrapper` with the provided initial i18n resource store.
     ///
@@ -151,7 +151,6 @@ where
     /// * `locale` - The locale for which to retrieve the i18n resource.
     ///
     /// # Returns
-    ///
     /// An `I18NAccess` object providing access to the i18n resource for the specified locale.
     pub fn get(&self, locale: K) -> I18NAccess<Self> {
         I18NAccess {

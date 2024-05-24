@@ -4,20 +4,20 @@ use bevy_reflect::{FromReflect, GetPath, Reflect, TypePath};
 pub trait ReflectResource = Reflect + TypePath + FromReflect;
 pub trait I18NReflected {
     /// Acquires a given resource through a string path. e.g "this.thing.here".
-    fn rs<R: ReflectResource>(&self, path: &str) -> Option<&R>;
+    fn by_path<R: ReflectResource>(&self, path: &str) -> Option<&R>;
 }
 
 impl<V: I18NFallback + Reflect> I18NReflected for V {
-    fn rs<R: ReflectResource>(&self, path: &str) -> Option<&R> {
+    fn by_path<R: ReflectResource>(&self, path: &str) -> Option<&R> {
         self.path(path).ok().and_then(Option::as_ref)
     }
 }
 
 impl<L: I18NTrait> I18NReflected for I18NAccess<'_, L>
 where
-    L::Value: Reflect,
+    L::V: Reflect,
 {
-    fn rs<R: ReflectResource>(&self, path: &str) -> Option<&R> {
-        self.to.rs(path).or_else(|| self.fallback.rs(path))
+    fn by_path<R: ReflectResource>(&self, path: &str) -> Option<&R> {
+        self.to.by_path(path).or_else(|| self.fallback.by_path(path))
     }
 }
