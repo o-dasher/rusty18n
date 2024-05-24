@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use std::{collections::HashMap, hash::Hash, str::FromStr};
 
 use bevy_reflect::Reflect;
@@ -56,7 +55,7 @@ pub trait I18NTrait {
 /// The I18NStore wraps a HashMap that maps key value pairs of Locale keys and localized
 /// implementations.
 #[derive(Debug)]
-pub struct I18NStore<L: I18NTrait>(pub HashMap<L::Key, Arc<L::Value>>);
+pub struct I18NStore<L: I18NTrait>(pub HashMap<L::Key, L::Value>);
 
 impl<L: I18NTrait, F: Fn() -> L::Value> From<Vec<(L::Key, F)>> for I18NStore<L> {
     fn from(value: Vec<(L::Key, F)>) -> Self {
@@ -77,32 +76,29 @@ impl<K: I18NKey, V: I18NFallback> I18NTrait for I18NWrapper<K, V> {
 
 /// I18NAccess is a wrapper that guards 2 versions of the same resource before accessing it.
 /// The fallback version in case the locale is not able to be found otherwise the provided locale for this I18NAccess.
-pub struct I18NAccess<L: I18NTrait> {
-    pub fallback: Arc<L::Value>,
-    pub to: Arc<L::Value>,
+pub struct I18NAccess<'a, L: I18NTrait> {
+    pub fallback: &'a L::Value,
+    pub to: &'a L::Value,
 }
 
-impl<L: I18NTrait> Clone for I18NAccess<L> {
+impl<L: I18NTrait> Clone for I18NAccess<'_, L> {
     fn clone(&self) -> Self {
         Self {
-            fallback: Arc::clone(&self.fallback),
-            to: Arc::clone(&self.to),
+            fallback: &self.fallback,
+            to: &self.to,
         }
     }
 }
 
 impl<'a, L: I18NTrait, Resource>
-    I18NAccessible<'a, fn(&Arc<L::Value>) -> &Option<Resource>, &'a Resource> for I18NAccess<L>
+    I18NAccessible<'a, fn(&L::Value) -> Option<&Resource>, &'a Resource> for I18NAccess<'_, L>
 {
     /// Returns the required resource, fallbacks to the fallback implementation in case the resource could not be
     /// found for a given locale.
-    fn access(&'a self, accessing: fn(&Arc<L::Value>) -> &Option<Resource>) -> &'a Resource {
-        accessing(&self.to)
-            .as_ref()
-            .unwrap_or_else(|| accessing(&self.fallback).as_ref().unwrap())
+    fn access(&'a self, accessing: fn(&L::Value) -> Option<&Resource>) -> &'a Resource {
+        accessing(&self.to).unwrap_or_else(|| accessing(&self.fallback).unwrap())
     }
 }
-
 
 // A NewType wrapper for a locale key with extended capabilities.
 pub struct LocaleKey<K: StringI18NKey>(pub K);
@@ -135,17 +131,17 @@ where
     }
 
     // Returns the i18n implementation of the provided key if it is found.
-    fn ref_opt(&self, locale: &K) -> Option<Arc<V>> {
-        self.store.0.get(locale).cloned()
+    fn ref_opt(&self, locale: &K) -> Option<&V> {
+        self.store.0.get(locale)
     }
 
     // Returns the fallback i18n implementation.
-    fn ref_default(&self) -> Arc<V> {
+    fn ref_default(&self) -> &V {
         self.ref_opt(&K::default()).unwrap()
     }
 
     // Returns either the provided key i18n implementation or the fallback one if not found.
-    fn ref_any(&self, locale: &K) -> Arc<V> {
+    fn ref_any(&self, locale: &K) -> &V {
         self.ref_opt(locale).unwrap_or_else(|| self.ref_default())
     }
 

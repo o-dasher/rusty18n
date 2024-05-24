@@ -13,7 +13,7 @@ impl<V: I18NFallback + Reflect> I18NReflected for V {
     }
 }
 
-impl<L: I18NTrait> I18NReflected for I18NAccess<L>
+impl<L: I18NTrait> I18NReflected for I18NAccess<'_, L>
 where
     L::Value: Reflect,
 {
