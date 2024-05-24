@@ -1,4 +1,4 @@
-use rusty18n::{t, I18NAccessible, I18NWrapper};
+use rusty18n::{t_prefix, I18NWrapper};
 
 use crate::i18n::ptbr::i18n_ptbr;
 
@@ -19,9 +19,11 @@ fn main() {
     let b = 2;
     let result = a + b;
 
-    let response_static = t!(br_locale.greetings.waves);
+    t_prefix!($, wah, br_locale);
+
+    let response_static = wah!(greetings.waves);
     let response_dynamic =
-        t!(br_locale.calculus.answers).access((a.to_string(), b.to_string(), result.to_string()));
+        wah!(calculus.answers).with((a.to_string(), b.to_string(), result.to_string()));
 
     println!("{}", response_static);
     println!("{}", response_dynamic);

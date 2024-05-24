@@ -2,39 +2,46 @@ use std::{collections::HashMap, hash::Hash};
 
 use bevy_reflect::Reflect;
 
-/// A trait to define some kind of structure that should be accessed in some way with provided arguments.
-pub trait I18NAccessible<'a, A, R> {
-    fn access(&'a self, args: A) -> R;
-}
-
 fn default_dynamic_resource<A>() -> fn(A) -> String {
     |_args: A| String::new()
 }
 
+/// A struct representing an internationalization (i18n) dynamic resource.
 #[derive(Reflect, Debug)]
 pub struct I18NDynamicResource<A> {
     #[reflect(ignore)]
     #[reflect(default = "default_dynamic_resource")]
-    pub caller: fn(A) -> String,
+    /// A function that takes arguments of type `A` and returns a string representing
+    /// the localized resource.
+    caller: fn(A) -> String,
 }
 
 impl<A> I18NDynamicResource<A> {
     pub fn new(caller: fn(A) -> String) -> Self {
         Self { caller }
     }
-}
 
-impl<A> I18NAccessible<'_, A, String> for I18NDynamicResource<A> {
-    fn access(&self, args: A) -> String {
+    /// Invokes the caller function with the provided arguments and returns the resulting string.
+    ///
+    /// # Arguments
+    /// * `args` - Arguments of type `A` to be passed to the caller function.
+    ///
+    /// # Returns
+    /// A string representing the localized resource.
+    pub fn with(&self, args: A) -> String {
         (self.caller)(args)
     }
 }
 
+/// A trait for defining fallback behavior in internationalization (i18n).
+/// It should be used when defining the main i18n component, it will be used
+/// when a given i18n resource tries to be acquired but isn't present for the
+/// given locale at that moment.
 pub trait I18NFallback {
-    /// This should return the fallback locale (a.k.a: default).
     fn fallback() -> Self;
 }
 
+/// A trait alias for i18n keys, ensuring they have specific traits.
 pub trait I18NKey = Eq + Hash + Default + Copy;
 
 /// This trait groups Key, Value types for a given I18N implementation.
@@ -54,7 +61,33 @@ impl<L: I18NTrait, F: Fn() -> L::Value> From<Vec<(L::Key, F)>> for I18NStore<L> 
     }
 }
 
-/// The I18NWrapper wraps over a I18NStore, acting as the middleman to acquire i18n resources.
+/// A struct representing access to i18n resources, with fallback support.
+///
+/// This struct holds references to both the fallback and target i18n resources.
+/// It allows accessing resources by applying a provided accessor function.
+pub struct I18NAccess<'a, L: I18NTrait> {
+    pub fallback: &'a L::Value,
+    pub to: &'a L::Value,
+}
+
+impl<'a, L: I18NTrait> I18NAccess<'_, L> {
+    /// Acquires a resource by applying the provided accessor function.
+    ///
+    /// This method attempts to access the target resource first and falls back to
+    /// the fallback resource if the target resource is not available.
+    ///
+    /// # Arguments
+    /// * `accessing` - A function that takes a reference to an i18n value and returns
+    ///                 an optional reference to the desired resource.
+    ///
+    /// # Returns
+    /// A reference to the acquired resource.
+    pub fn acquire<R>(&'a self, accessing: fn(&L::Value) -> Option<&R>) -> &'a R {
+        accessing(self.to).unwrap_or_else(|| accessing(self.fallback).unwrap())
+    }
+}
+
+/// A wrapper for i18n resources, providing access and fallback support.
 #[derive(Debug)]
 pub struct I18NWrapper<K: I18NKey, V: I18NFallback> {
     pub store: I18NStore<Self>,
@@ -65,36 +98,17 @@ impl<K: I18NKey, V: I18NFallback> I18NTrait for I18NWrapper<K, V> {
     type Value = V;
 }
 
-/// I18NAccess is a wrapper that guards 2 versions of the same resource before accessing it.
-/// The fallback version in case the locale is not able to be found otherwise the provided locale for this I18NAccess.
-pub struct I18NAccess<'a, L: I18NTrait> {
-    pub fallback: &'a L::Value,
-    pub to: &'a L::Value,
-}
-
-impl<L: I18NTrait> Clone for I18NAccess<'_, L> {
-    fn clone(&self) -> Self {
-        Self {
-            fallback: self.fallback,
-            to: self.to,
-        }
-    }
-}
-
-impl<'a, L: I18NTrait, Resource>
-    I18NAccessible<'a, fn(&L::Value) -> Option<&Resource>, &'a Resource> for I18NAccess<'_, L>
-{
-    /// Returns the required resource, fallbacks to the fallback implementation in case the resource could not be
-    /// found for a given locale.
-    fn access(&'a self, accessing: fn(&L::Value) -> Option<&Resource>) -> &'a Resource {
-        accessing(self.to).unwrap_or_else(|| accessing(self.fallback).unwrap())
-    }
-}
-
 impl<K: I18NKey, V: I18NFallback> I18NWrapper<K, V>
 where
     Self: I18NTrait<Key = K, Value = V>,
 {
+    /// Constructs a new `I18NWrapper` with the provided initial i18n resource store.
+    ///
+    /// # Arguments
+    /// * `store` - A vector of key-value pairs representing the initial i18n resource store.
+    ///
+    /// # Returns
+    /// A new `I18NWrapper` instance.
     pub fn new(store: Vec<(K, fn() -> V)>) -> Self {
         let mut store = I18NStore::from(store);
 
@@ -103,22 +117,42 @@ where
         Self { store }
     }
 
-    // Returns the fallback i18n implementation.
+    /// Gets a reference to the default i18n resource.
     fn ref_default(&self) -> &V {
         self.ref_opt(K::default()).unwrap()
     }
 
-    // Returns the i18n implementation of the provided key if it is found.
+    /// Gets a reference to the i18n resource for the specified locale, if available.
+    ///
+    /// # Arguments
+    /// * `locale` - The locale for which to retrieve the i18n resource.
+    ///
+    /// # Returns
+    /// An optional reference to the i18n resource.
     fn ref_opt(&self, locale: K) -> Option<&V> {
         self.store.0.get(&locale)
     }
 
-    // Returns either the provided key i18n implementation or the fallback one if not found.
+    /// Gets a reference to the i18n resource for the specified locale or falls back to the default.
+    ///
+    /// # Arguments
+    /// * `locale` - The locale for which to retrieve the i18n resource.
+    ///
+    /// # Returns
+    /// A reference to the i18n resource.
     fn ref_any(&self, locale: K) -> &V {
         self.ref_opt(locale).unwrap_or_else(|| self.ref_default())
     }
 
-    /// Returns an I18NAccess to a given locale key.
+    /// Gets an access object for the specified locale.
+    ///
+    /// # Arguments
+    ///
+    /// * `locale` - The locale for which to retrieve the i18n resource.
+    ///
+    /// # Returns
+    ///
+    /// An `I18NAccess` object providing access to the i18n resource for the specified locale.
     pub fn get(&self, locale: K) -> I18NAccess<Self> {
         I18NAccess {
             fallback: self.ref_default(),
