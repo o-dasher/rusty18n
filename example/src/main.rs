@@ -1,4 +1,4 @@
-use rusty18n::{t_prefix, I18NWrapper};
+use rusty18n::{ t_prefix, I18NWrapper};
 
 use crate::i18n::ptbr::i18n_ptbr;
 
@@ -13,13 +13,13 @@ pub enum I18NKey {
 
 fn main() {
     let locales = I18NWrapper::new(vec![(I18NKey::PTBR, i18n_ptbr)]);
-    let br_locale = locales.get(I18NKey::PTBR);
+    let i18n = locales.get(I18NKey::PTBR);
 
     let a = 1;
     let b = 2;
     let result = a + b;
 
-    t_prefix!($, wah, br_locale);
+    t_prefix!($wah, i18n);
 
     let response_static = wah!(greetings.waves);
     let response_dynamic =
