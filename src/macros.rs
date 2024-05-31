@@ -34,16 +34,20 @@ macro_rules! define_i18n {
 
 #[macro_export]
 macro_rules! t_prefix {
-    ($dollar:tt, $name:ident, $prefix_var:ident $(. $prefix_access:tt)*) => (
+    ($dollar:tt$name:ident, $prefix_var:ident $(. $prefix_access:tt)*) => {
         macro_rules! $name {
             ($dollar($access:tt).*) => (
                 $prefix_var.acquire(|v| v$(. $prefix_access)* $dollar(. $access)*.as_ref())
             )
         }
+    };
+
+    ($dollar:tt $name:ident, $prefix_var:ident $(. $prefix_access:tt)*) => (
+        rusty18n::t_prefix!($dollar$name, $prefix_var $(.$prefix_access)*)
     );
 
-    ($dollar:tt, $prefix_var:ident $(.$prefix_access:tt)*) => (
-        t_prefix!($dollar, t, $prefix_var $(. $prefix_access)*)
+    ($dollar:tt$prefix_var:ident $(.$prefix_access:tt)*) => (
+        rusty18n::t_prefix!($dollar t, $prefix_var $(. $prefix_access)*)
     );
 }
 
