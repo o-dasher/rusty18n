@@ -1,4 +1,4 @@
-use rusty18n::{ t_prefix, I18NWrapper};
+use rusty18n::{t_prefix, I18NWrapper};
 
 use crate::i18n::ptbr::i18n_ptbr;
 
@@ -15,7 +15,7 @@ fn main() {
     let locales = I18NWrapper::new(vec![(I18NKey::PTBR, i18n_ptbr)]);
     let i18n = locales.get(I18NKey::PTBR);
 
-    let a = 1;
+    let a = 3;
     let b = 2;
     let result = a + b;
 
