@@ -6,7 +6,7 @@ mod reflect;
 
 pub use crate::core::*;
 
-#[cfg(feature="bevy_reflect")]
+#[cfg(feature = "bevy_reflect")]
 pub use crate::reflect::*;
 
 /// This type is used to define a simple i18n resource that does not have any dynamic variables

@@ -95,6 +95,7 @@ impl<L: I18NTrait> I18NAccess<'_, L> {
 #[derive(Debug)]
 pub struct I18NWrapper<K: I18NKey, V: I18NFallback> {
     pub store: I18NStore<Self>,
+    fallback: V,
 }
 
 impl<K: I18NKey, V: I18NFallback> I18NTrait for I18NWrapper<K, V> {
@@ -118,12 +119,15 @@ where
 
         store.0.insert(K::default(), V::fallback());
 
-        Self { store }
+        Self {
+            store,
+            fallback: V::fallback(),
+        }
     }
 
     /// Gets a reference to the default i18n resource.
     fn ref_default(&self) -> &V {
-        self.ref_opt(K::default()).unwrap()
+        &self.fallback
     }
 
     /// Gets a reference to the i18n resource for the specified locale, if available.
