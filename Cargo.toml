@@ -1,6 +1,6 @@
 [package]
 name = "rusty18n"
-version = "0.1.7"
+version = "0.1.8"
 edition = "2021"
 
 repository = "https://github.com/o-dasher/rusty18n.git"
