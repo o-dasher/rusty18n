@@ -45,12 +45,9 @@ pub trait I18NFallback {
     fn fallback() -> Self;
 }
 
-/// A trait alias for i18n keys, ensuring they have specific traits.
-pub trait I18NKey = Eq + Hash + Default + Copy;
-
 /// This trait groups Key, Value types for a given I18N implementation.
 pub trait I18NTrait {
-    type K: I18NKey;
+    type K: Eq + Hash + Default + Copy;
     type V: I18NFallback;
 }
 
@@ -93,17 +90,17 @@ impl<L: I18NTrait> I18NAccess<'_, L> {
 
 /// A wrapper for i18n resources, providing access and fallback support.
 #[derive(Debug)]
-pub struct I18NWrapper<K: I18NKey, V: I18NFallback> {
+pub struct I18NWrapper<K: Eq + Hash + Default + Copy, V: I18NFallback> {
     pub store: I18NStore<Self>,
     fallback: V,
 }
 
-impl<K: I18NKey, V: I18NFallback> I18NTrait for I18NWrapper<K, V> {
+impl<K: Eq + Hash + Default + Copy, V: I18NFallback> I18NTrait for I18NWrapper<K, V> {
     type K = K;
     type V = V;
 }
 
-impl<K: I18NKey, V: I18NFallback> I18NWrapper<K, V>
+impl<K: Eq + Hash + Default + Copy, V: I18NFallback> I18NWrapper<K, V>
 where
     Self: I18NTrait<K = K, V = V>,
 {
