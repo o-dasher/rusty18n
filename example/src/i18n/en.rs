@@ -1,18 +1,13 @@
-use crate::i18n::i_18_n_usage::I18NUsage;
-use rusty18n::{r, I18NDynamicResource, I18NFallback};
+use rusty18n::r;
+use rusty18n::{define_i18n_fallback, I18NDynamicResource};
 
-use super::i_18_n_usage::{calculus::Calculus, greetings::Greetings};
-
-impl I18NFallback for I18NUsage {
-    fn fallback() -> Self {
-        I18NUsage {
-            greetings: Greetings {
-                waves: r!("Waves"),
-                cool: r!("Hey that is cool"),
-            },
-            calculus: Calculus {
-                answers: r!(|(a, b, c)| "{a}+{b}={c} yeah!"),
-            },
-        }
-    }
+define_i18n_fallback! {
+    i_18_n_usage,
+    greetings {
+        waves: r!("Waves"),
+        cool: r!("Hey that is cool"),
+    },
+    calculus {
+        answers: r!(|(a, b, c)| "{a}+{b}={c} yeah!"),
+    },
 }

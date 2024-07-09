@@ -9,5 +9,6 @@ edition = "2021"
 deep-struct-update = "0.1.0"
 merge-struct = "0.1.0"
 nestruct = "0.1.0"
+paste = "1.0.15"
 rusty18n = { path = "../" }
 serde = { version = "1.0.193", features = ["serde_derive"] }
