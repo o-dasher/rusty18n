@@ -33,15 +33,15 @@ fn infers_placeholders_and_handles_escaped_braces() {
         .expect("en locale should exist");
 
     assert_eq!(
-        rusty18n::t!(en.messages.inferred).and_then(|value| value.with((1, 2, 3))),
+        rusty18n::t!(en.messages.inferred).map(|value| value.with((1, 2, 3))),
         Ok("This is 1, 2, 3".to_string())
     );
     assert_eq!(
-        rusty18n::t!(en.messages.repeated).and_then(|value| value.with(("echo",))),
+        rusty18n::t!(en.messages.repeated).map(|value| value.with(("echo",))),
         Ok("echo + echo".to_string())
     );
     assert_eq!(
-        rusty18n::t!(en.messages.escaped).and_then(|value| value.with(("value",))),
+        rusty18n::t!(en.messages.escaped).map(|value| value.with(("value",))),
         Ok("Curly {brace} and value".to_string())
     );
     assert_eq!(
@@ -58,7 +58,7 @@ fn infers_placeholder_order_from_first_appearance() {
         .get(I18NUsage::Key::pt)
         .expect("pt locale access should be available");
     assert_eq!(
-        rusty18n::t!(pt.messages.inferred).and_then(|value| value.with(("C", "A", "B"))),
+        rusty18n::t!(pt.messages.inferred).map(|value| value.with(("C", "A", "B"))),
         Ok("C depois A depois B".to_string())
     );
 }

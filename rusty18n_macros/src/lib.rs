@@ -1,7 +1,10 @@
 use proc_macro::TokenStream;
-use proc_macro2::Span;
+use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{parse_macro_input, Error, Index, LitInt, LitStr};
+use syn::{
+    parse::{Parse, ParseStream},
+    parse_macro_input, Error, Index, LitStr, Path, Token,
+};
 use winnow::{
     combinator::{alt, delimited, repeat},
     error::ModalResult,
@@ -12,7 +15,7 @@ use winnow::{
 struct TemplateSpec {
     display_text: String,
     render_format: String,
-    expected_args: usize,
+    arg_count: usize,
     render_indices: Vec<usize>,
 }
 
@@ -23,12 +26,39 @@ enum TemplatePart<'a> {
     Placeholder(&'a str),
 }
 
+struct ResourceInput {
+    crate_path: Path,
+    literal: LitStr,
+}
+
+impl Parse for ResourceInput {
+    fn parse(input: ParseStream<'_>) -> syn::Result<Self> {
+        Ok(Self {
+            crate_path: input.parse()?,
+            literal: {
+                input.parse::<Token![,]>()?;
+                input.parse()?
+            },
+        })
+    }
+}
+
 #[proc_macro]
 pub fn __i18n_build_resource(input: TokenStream) -> TokenStream {
-    let literal = parse_macro_input!(input as LitStr);
+    let input = parse_macro_input!(input as ResourceInput);
 
-    match parse_template(&literal) {
-        Ok(spec) => build_tokens(&literal, spec),
+    match parse_template(&input.literal) {
+        Ok(spec) => build_resource_tokens(&input.crate_path, &input.literal, spec),
+        Err(error) => error.to_compile_error().into(),
+    }
+}
+
+#[proc_macro]
+pub fn __i18n_resource_type(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as ResourceInput);
+
+    match parse_template(&input.literal) {
+        Ok(spec) => build_type_tokens(&input.crate_path, spec.arg_count),
         Err(error) => error.to_compile_error().into(),
     }
 }
@@ -79,7 +109,7 @@ fn parse_template(literal: &LitStr) -> syn::Result<TemplateSpec> {
     Ok(TemplateSpec {
         display_text,
         render_format,
-        expected_args: placeholders.len(),
+        arg_count: placeholders.len(),
         render_indices,
     })
 }
@@ -111,10 +141,10 @@ const fn is_identifier_continue(ch: char) -> bool {
     ch == '_' || ch.is_ascii_alphanumeric()
 }
 
-fn build_tokens(literal: &LitStr, spec: TemplateSpec) -> TokenStream {
+fn build_resource_tokens(crate_path: &Path, literal: &LitStr, spec: TemplateSpec) -> TokenStream {
     let display_text = LitStr::new(&spec.display_text, literal.span());
     let template = LitStr::new(&literal.value(), literal.span());
-    let expected_args = LitInt::new(&spec.expected_args.to_string(), Span::call_site());
+    let marker = build_marker_type(spec.arg_count);
     let render_format = LitStr::new(&spec.render_format, literal.span());
     let render_indices = spec
         .render_indices
@@ -122,22 +152,29 @@ fn build_tokens(literal: &LitStr, spec: TemplateSpec) -> TokenStream {
         .map(Index::from)
         .collect::<Vec<_>>();
 
-    let render = if render_indices.is_empty() {
-        quote! {
-            (|_: &[::std::string::String]| {
-                ::std::format!(#render_format)
-            }) as fn(&[::std::string::String]) -> ::std::string::String
-        }
-    } else {
-        quote! {
-            (|args: &[::std::string::String]| {
-                ::std::format!(#render_format, #(args[#render_indices].as_str()),*)
-            }) as fn(&[::std::string::String]) -> ::std::string::String
-        }
+    let render = quote! {
+        (|args: &[::std::string::String], _: ::core::option::Option<fn() -> #marker>| {
+            ::std::format!(#render_format #(, args[#render_indices].as_str())*)
+        }) as fn(&[::std::string::String], ::core::option::Option<fn() -> #marker>) -> ::std::string::String
     };
 
     quote! {
-        (#display_text, #template, #expected_args, #render)
+        #crate_path::__private::new_static_resource::<#marker>(#display_text, #template, #render)
     }
     .into()
+}
+
+fn build_type_tokens(crate_path: &Path, arg_count: usize) -> TokenStream {
+    let marker = build_marker_type(arg_count);
+
+    quote! {
+        #crate_path::R<#marker>
+    }
+    .into()
+}
+
+fn build_marker_type(arg_count: usize) -> TokenStream2 {
+    let markers = std::iter::repeat_n(quote!(()), arg_count);
+
+    quote!(( #( #markers, )* ))
 }

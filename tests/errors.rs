@@ -20,16 +20,9 @@ mod fixtures {
 }
 
 #[test]
-fn returns_errors_for_argument_mismatches() {
+fn renders_dynamic_resources_without_runtime_argument_errors() {
     let resource = fixtures::en::en().value.expect("resource should exist");
-    assert_eq!(
-        resource.with(()),
-        Err(Error::InvalidArgumentCount {
-            template: "Hello {name}".to_string(),
-            expected: 1,
-            got: 0,
-        })
-    );
+    assert_eq!(resource.with(("world",)), "Hello world");
 }
 
 #[test]

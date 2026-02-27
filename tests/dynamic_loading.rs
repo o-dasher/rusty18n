@@ -31,9 +31,7 @@ where
         .acquire(|v| v.messages.inferred.as_ref())
         .expect("inferred resource should resolve");
 
-    value
-        .with(("C", "A", "B"))
-        .expect("inferred resource should resolve")
+    value.with(("C", "A", "B"))
 }
 
 #[test]
@@ -48,7 +46,7 @@ fn loads_and_unloads_locales_on_demand() {
         .get(I18NUsage::Key::pt)
         .expect("pt locale access should be available");
     assert_eq!(
-        rusty18n::t!(pt.messages.inferred).and_then(|value| value.with(("C", "A", "B"))),
+        rusty18n::t!(pt.messages.inferred).map(|value| value.with(("C", "A", "B"))),
         Ok("This is C, A, B".to_string())
     );
     assert_eq!(
@@ -63,7 +61,7 @@ fn loads_and_unloads_locales_on_demand() {
         .get(I18NUsage::Key::pt)
         .expect("pt locale access should be available");
     assert_eq!(
-        rusty18n::t!(pt.messages.inferred).and_then(|value| value.with(("C", "A", "B"))),
+        rusty18n::t!(pt.messages.inferred).map(|value| value.with(("C", "A", "B"))),
         Ok("C depois A depois B".to_string())
     );
     assert_eq!(
@@ -79,7 +77,7 @@ fn loads_and_unloads_locales_on_demand() {
         .get(I18NUsage::Key::pt)
         .expect("pt locale access should be available");
     assert_eq!(
-        rusty18n::t!(pt.messages.inferred).and_then(|value| value.with(("C", "A", "B"))),
+        rusty18n::t!(pt.messages.inferred).map(|value| value.with(("C", "A", "B"))),
         Ok("This is C, A, B".to_string())
     );
 

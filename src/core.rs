@@ -7,13 +7,6 @@ use std::{collections::HashMap, fmt::Display, hash::Hash};
 /// Errors produced by `rusty18n`.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum Error {
-    /// A dynamic resource was rendered with the wrong number of arguments.
-    #[error("expected {expected} argument(s) for `{template}`, got {got}")]
-    InvalidArgumentCount {
-        template: String,
-        expected: usize,
-        got: usize,
-    },
     /// The default locale entry is missing from the locale store.
     #[error("missing fallback locale in store")]
     MissingFallbackLocale,
@@ -28,8 +21,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// A locale constructor used by the dynamic wrapper.
 pub type I18NLocaleLoader<V> = fn() -> V;
 
-type I18NRenderFn = fn(&[String]) -> String;
-type I18NRender = Option<I18NRenderFn>;
+type I18NRenderFn<M> = fn(&[String], Option<fn() -> M>) -> String;
+type I18NRender<M> = Option<I18NRenderFn<M>>;
 
 /// Converts user-provided dynamic arguments into positional `String`s.
 ///
@@ -54,36 +47,43 @@ impl IntoDynamicResourceArgs for Tuple {
     }
 }
 
+#[doc(hidden)]
+pub trait I18NDynamicArgs {
+    type Marker;
+}
+
+#[impl_for_tuples(0, 16)]
+#[tuple_types_no_default_trait_bound]
+impl I18NDynamicArgs for Tuple {
+    for_tuples!( type Marker = ( #( () ),* ); );
+}
+
 /// A struct representing an internationalization (i18n) dynamic resource.
 #[derive(Debug, AsRef, Deref, DeriveDisplay)]
 #[cfg_attr(feature = "bevy_reflect", derive(Reflect))]
 #[display("{}", display_text)]
 #[doc(hidden)]
-pub struct __I18NDynamicResourceValue {
+pub struct __I18NDynamicResourceValue<M = ()> {
     #[cfg_attr(feature = "bevy_reflect", reflect(ignore))]
     template: &'static str,
-    #[cfg_attr(feature = "bevy_reflect", reflect(ignore))]
-    expected_args: usize,
     /// Template text with escaped braces resolved.
     #[cfg_attr(feature = "bevy_reflect", reflect(ignore))]
     #[as_ref(forward)]
     #[deref(forward)]
     display_text: &'static str,
     #[cfg_attr(feature = "bevy_reflect", reflect(ignore))]
-    render: I18NRender,
+    render: I18NRender<M>,
 }
 
-impl __I18NDynamicResourceValue {
+impl<M> __I18NDynamicResourceValue<M> {
     #[must_use]
     const fn new_static(
         display_text: &'static str,
         template: &'static str,
-        expected_args: usize,
-        render: I18NRenderFn,
+        render: I18NRenderFn<M>,
     ) -> Self {
         Self {
             template,
-            expected_args,
             display_text,
             render: Some(render),
         }
@@ -98,54 +98,40 @@ impl __I18NDynamicResourceValue {
     /// # Returns
     /// A string representing the localized resource.
     ///
-    /// # Errors
-    /// Returns [`Error::InvalidArgumentCount`] when the provided arguments do
-    /// not match the inferred placeholder count.
-    pub fn with<T>(&self, args: T) -> Result<String>
+    #[must_use]
+    pub fn with<T>(&self, args: T) -> String
     where
-        T: IntoDynamicResourceArgs,
+        T: IntoDynamicResourceArgs + I18NDynamicArgs<Marker = M>,
     {
         let args = args.into_dynamic_resource_args();
-        let got = args.len();
 
-        if got != self.expected_args {
-            return Err(Error::InvalidArgumentCount {
-                template: self.template.to_string(),
-                expected: self.expected_args,
-                got,
-            });
-        }
-
-        Ok(self.render.unwrap_or(|_| String::new())(&args))
+        self.render.unwrap_or(|_, _| String::new())(&args, None)
     }
 }
 
 #[doc(hidden)]
 pub mod __private {
-    use super::__I18NDynamicResourceValue;
+    use super::{I18NRenderFn, __I18NDynamicResourceValue};
 
     #[must_use]
-    pub const fn new_static_resource(
+    pub const fn new_static_resource<M>(
         display_text: &'static str,
         template: &'static str,
-        expected_args: usize,
-        render: fn(&[String]) -> String,
-    ) -> __I18NDynamicResourceValue {
-        __I18NDynamicResourceValue::new_static(display_text, template, expected_args, render)
+        render: I18NRenderFn<M>,
+    ) -> __I18NDynamicResourceValue<M> {
+        __I18NDynamicResourceValue::new_static(display_text, template, render)
     }
 }
 
-impl PartialEq for __I18NDynamicResourceValue {
+impl<M> PartialEq for __I18NDynamicResourceValue<M> {
     fn eq(&self, other: &Self) -> bool {
         self.template == other.template
-            && self.expected_args == other.expected_args
-            && self.display_text == other.display_text
     }
 }
 
-impl Eq for __I18NDynamicResourceValue {}
+impl<M> Eq for __I18NDynamicResourceValue<M> {}
 
-impl PartialEq<str> for __I18NDynamicResourceValue {
+impl<M> PartialEq<str> for __I18NDynamicResourceValue<M> {
     fn eq(&self, other: &str) -> bool {
         self.display_text == other
     }

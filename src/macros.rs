@@ -30,15 +30,9 @@ macro_rules! i18n_define_struct {
 #[doc(hidden)]
 #[macro_export]
 macro_rules! i18n_leaf_expr {
-    ($lit:literal) => {{
-        let (display_text, template, expected_args, render) = $crate::__i18n_build_resource!($lit);
-        Some($crate::__private::new_static_resource(
-            display_text,
-            template,
-            expected_args,
-            render,
-        ))
-    }};
+    ($lit:literal) => {
+        Some($crate::__i18n_build_resource!($crate, $lit))
+    };
 }
 
 /// Builds a generated field type from the DSL leaf form.
@@ -46,7 +40,7 @@ macro_rules! i18n_leaf_expr {
 #[macro_export]
 macro_rules! i18n_leaf_type {
     ($lit:literal) => {
-        Option<$crate::R>
+        Option<$crate::__i18n_resource_type!($crate, $lit)>
     };
 }
 
