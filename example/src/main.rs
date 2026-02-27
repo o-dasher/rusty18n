@@ -1,19 +1,10 @@
-use rusty18n::{t_prefix, I18NWrapper};
-
-use crate::i18n::ptbr::i18n_ptbr;
+use rusty18n::t_prefix;
 
 mod i18n;
 
-#[derive(Default, Clone, Copy, Hash, Eq, PartialEq)]
-pub enum I18NKey {
-    #[default]
-    US,
-    PTBR,
-}
-
 fn main() {
-    let locales = I18NWrapper::new(vec![(I18NKey::PTBR, i18n_ptbr)]);
-    let i18n = locales.get(I18NKey::PTBR);
+    let locales = i18n::i18n_locales();
+    let i18n = locales.get(i18n::I18NKey::Pt);
 
     let a = 3;
     let b = 2;
