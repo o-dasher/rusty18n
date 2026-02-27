@@ -31,10 +31,13 @@ macro_rules! i18n_define_struct {
 #[macro_export]
 macro_rules! i18n_leaf_expr {
     ($lit:literal) => {{
-        const _: () = {
-            $crate::__assert_valid_template($lit);
-        };
-        Some($crate::__private::new_static_resource($lit))
+        let (display_text, template, expected_args, render) = $crate::__i18n_build_resource!($lit);
+        Some($crate::__private::new_static_resource(
+            display_text,
+            template,
+            expected_args,
+            render,
+        ))
     }};
 }
 

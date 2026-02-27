@@ -2,21 +2,11 @@
 use bevy_reflect::Reflect;
 use derive_more::derive::{AsRef, Deref, Display as DeriveDisplay};
 use impl_trait_for_tuples::impl_for_tuples;
-use nom::{
-    branch::alt,
-    bytes::complete::{is_not, tag},
-    combinator::{iterator, map},
-    sequence::delimited,
-    IResult,
-};
 use std::{collections::HashMap, fmt::Display, hash::Hash};
 
 /// Errors produced by `rusty18n`.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum Error {
-    /// The translation template contains invalid brace syntax.
-    #[error("invalid template `{template}`")]
-    InvalidTemplate { template: String },
     /// A dynamic resource was rendered with the wrong number of arguments.
     #[error("expected {expected} argument(s) for `{template}`, got {got}")]
     InvalidArgumentCount {
@@ -37,6 +27,21 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// A locale constructor used by the dynamic wrapper.
 pub type I18NLocaleLoader<V> = fn() -> V;
+
+type I18NRenderFn = fn(&[String]) -> String;
+
+#[derive(Clone, Copy, Debug)]
+struct I18NRender(I18NRenderFn);
+
+const fn empty_render(_: &[String]) -> String {
+    String::new()
+}
+
+impl Default for I18NRender {
+    fn default() -> Self {
+        Self(empty_render)
+    }
+}
 
 /// Converts user-provided dynamic arguments into positional `String`s.
 ///
@@ -61,259 +66,39 @@ impl IntoDynamicResourceArgs for Tuple {
     }
 }
 
-fn parse_template(template: &str) -> Result<(String, Vec<String>)> {
-    let mut rendered = String::new();
-    let mut placeholders = Vec::new();
-
-    for_each_template_part(template, |part| {
-        match part {
-            TemplatePart::Text(text) => rendered.push_str(text),
-            TemplatePart::Escaped(ch) => rendered.push(ch),
-            TemplatePart::Placeholder(name) => {
-                rendered.push('{');
-                rendered.push_str(name);
-                rendered.push('}');
-
-                if !placeholders
-                    .iter()
-                    .any(|candidate: &String| candidate == name)
-                {
-                    placeholders.push(name.to_string());
-                }
-            }
-        }
-        Ok(())
-    })?;
-
-    Ok((rendered, placeholders))
-}
-
-#[derive(Clone, Copy)]
-enum TemplatePart<'a> {
-    Text(&'a str),
-    Escaped(char),
-    Placeholder(&'a str),
-}
-
-fn template_part(input: &str) -> IResult<&str, TemplatePart<'_>> {
-    alt((
-        map(tag("{{"), |_| TemplatePart::Escaped('{')),
-        map(tag("}}"), |_| TemplatePart::Escaped('}')),
-        map(
-            delimited(tag("{"), is_not("{}"), tag("}")),
-            TemplatePart::Placeholder,
-        ),
-        map(is_not("{}"), TemplatePart::Text),
-    ))(input)
-}
-
-fn for_each_template_part<'a>(
-    template: &'a str,
-    mut visit: impl FnMut(TemplatePart<'a>) -> Result<()>,
-) -> Result<()> {
-    let mut parts = iterator(template, template_part);
-
-    for part in &mut parts {
-        visit(part)?;
-    }
-
-    let (rest, ()) = parts.finish().map_err(|_| Error::InvalidTemplate {
-        template: template.to_string(),
-    })?;
-
-    if rest.is_empty() {
-        Ok(())
-    } else {
-        Err(Error::InvalidTemplate {
-            template: template.to_string(),
-        })
-    }
-}
-
-fn build_static_template(template: &'static str) -> (String, Vec<String>) {
-    let bytes = template.as_bytes();
-    let mut display_text = String::with_capacity(template.len());
-    let mut placeholders = Vec::new();
-    let mut index = 0;
-    let mut text_start = 0;
-
-    while index < bytes.len() {
-        match bytes[index] {
-            b'{' if index + 1 < bytes.len() && bytes[index + 1] == b'{' => {
-                display_text.push_str(&template[text_start..index]);
-                display_text.push('{');
-                index += 2;
-                text_start = index;
-            }
-            b'}' if index + 1 < bytes.len() && bytes[index + 1] == b'}' => {
-                display_text.push_str(&template[text_start..index]);
-                display_text.push('}');
-                index += 2;
-                text_start = index;
-            }
-            b'{' => {
-                let mut placeholder_end = index + 1;
-                let mut is_placeholder = placeholder_end < bytes.len();
-
-                while placeholder_end < bytes.len() && bytes[placeholder_end] != b'}' {
-                    if bytes[placeholder_end] == b'{' {
-                        is_placeholder = false;
-                        break;
-                    }
-                    placeholder_end += 1;
-                }
-
-                if is_placeholder && placeholder_end < bytes.len() && placeholder_end > index + 1 {
-                    display_text.push_str(&template[text_start..index]);
-
-                    let name = &template[index + 1..placeholder_end];
-                    display_text.push('{');
-                    display_text.push_str(name);
-                    display_text.push('}');
-
-                    if !placeholders
-                        .iter()
-                        .any(|candidate: &String| candidate == name)
-                    {
-                        placeholders.push(name.to_string());
-                    }
-
-                    index = placeholder_end + 1;
-                    text_start = index;
-                } else {
-                    index += 1;
-                }
-            }
-            _ => index += 1,
-        }
-    }
-
-    display_text.push_str(&template[text_start..]);
-
-    (display_text, placeholders)
-}
-
-#[doc(hidden)]
-pub const fn __assert_valid_template(template: &str) {
-    let bytes = template.as_bytes();
-    let mut index = 0;
-
-    while index < bytes.len() {
-        match bytes[index] {
-            b'{' => {
-                if index + 1 < bytes.len() && bytes[index + 1] == b'{' {
-                    index += 2;
-                    continue;
-                }
-
-                index += 1;
-                let start = index;
-
-                while index < bytes.len() && bytes[index] != b'}' {
-                    assert!(bytes[index] != b'{', "invalid template literal");
-                    index += 1;
-                }
-
-                assert!(
-                    !(index == start || index >= bytes.len()),
-                    "invalid template literal"
-                );
-
-                index += 1;
-            }
-            b'}' => {
-                assert!(
-                    index + 1 < bytes.len() && bytes[index + 1] == b'}',
-                    "invalid template literal"
-                );
-                index += 2;
-            }
-            _ => index += 1,
-        }
-    }
-}
-
-fn render_template(template: &str, args: &[String], placeholders: &[String]) -> Result<String> {
-    let mut rendered = String::with_capacity(template.len());
-
-    if args.len() != placeholders.len() {
-        return Err(Error::InvalidArgumentCount {
-            template: template.to_string(),
-            expected: placeholders.len(),
-            got: args.len(),
-        });
-    }
-
-    for_each_template_part(template, |part| {
-        match part {
-            TemplatePart::Text(text) => rendered.push_str(text),
-            TemplatePart::Escaped(ch) => rendered.push(ch),
-            TemplatePart::Placeholder(name) => {
-                let index = placeholders
-                    .iter()
-                    .position(|candidate| candidate == name)
-                    .ok_or_else(|| Error::InvalidTemplate {
-                        template: template.to_string(),
-                    })?;
-
-                let value = args.get(index).ok_or_else(|| Error::InvalidArgumentCount {
-                    template: template.to_string(),
-                    expected: placeholders.len(),
-                    got: args.len(),
-                })?;
-
-                rendered.push_str(value);
-            }
-        }
-        Ok(())
-    })?;
-
-    Ok(rendered)
-}
-
 /// A struct representing an internationalization (i18n) dynamic resource.
-#[derive(Debug, PartialEq, Eq, AsRef, Deref, DeriveDisplay)]
+#[derive(Debug, AsRef, Deref, DeriveDisplay)]
 #[cfg_attr(feature = "bevy_reflect", derive(Reflect))]
 #[display("{}", display_text)]
 #[doc(hidden)]
 pub struct __I18NDynamicResourceValue {
     #[cfg_attr(feature = "bevy_reflect", reflect(ignore))]
-    template: String,
+    template: &'static str,
     #[cfg_attr(feature = "bevy_reflect", reflect(ignore))]
-    placeholders: Vec<String>,
+    expected_args: usize,
+    #[cfg_attr(feature = "bevy_reflect", reflect(ignore))]
+    render: I18NRender,
     /// Template text with escaped braces resolved.
+    #[cfg_attr(feature = "bevy_reflect", reflect(ignore))]
     #[as_ref(forward)]
     #[deref(forward)]
-    display_text: String,
+    display_text: &'static str,
 }
 
 impl __I18NDynamicResourceValue {
     #[must_use]
-    fn new_static(template: &'static str) -> Self {
-        let (display_text, placeholders) = build_static_template(template);
-
+    const fn new_static(
+        display_text: &'static str,
+        template: &'static str,
+        expected_args: usize,
+        render: I18NRenderFn,
+    ) -> Self {
         Self {
-            template: template.to_string(),
-            placeholders,
+            template,
+            expected_args,
+            render: I18NRender(render),
             display_text,
         }
-    }
-
-    /// Creates a new resource by parsing a template with `{placeholder}` markers.
-    ///
-    /// Positional arguments passed to `.with((...))` are matched by first appearance.
-    /// Use `{{` and `}}` to render literal braces.
-    ///
-    /// # Errors
-    /// Returns [`Error::InvalidTemplate`] when the template contains invalid brace syntax.
-    pub fn new(template: &str) -> Result<Self> {
-        let (display_text, placeholders) = parse_template(template)?;
-
-        Ok(Self {
-            template: template.to_string(),
-            placeholders,
-            display_text,
-        })
     }
 
     /// Invokes the dynamic resource with user-provided arguments.
@@ -326,18 +111,24 @@ impl __I18NDynamicResourceValue {
     /// A string representing the localized resource.
     ///
     /// # Errors
-    /// Returns [`Error::InvalidTemplate`] when the template is malformed, or
-    /// [`Error::InvalidArgumentCount`] when the provided arguments do not match
-    /// the inferred placeholder count.
+    /// Returns [`Error::InvalidArgumentCount`] when the provided arguments do
+    /// not match the inferred placeholder count.
     pub fn with<T>(&self, args: T) -> Result<String>
     where
         T: IntoDynamicResourceArgs,
     {
-        render_template(
-            &self.template,
-            &args.into_dynamic_resource_args(),
-            &self.placeholders,
-        )
+        let args = args.into_dynamic_resource_args();
+        let got = args.len();
+
+        if got != self.expected_args {
+            return Err(Error::InvalidArgumentCount {
+                template: self.template.to_string(),
+                expected: self.expected_args,
+                got,
+            });
+        }
+
+        Ok((self.render.0)(&args))
     }
 }
 
@@ -346,10 +137,25 @@ pub mod __private {
     use super::__I18NDynamicResourceValue;
 
     #[must_use]
-    pub fn new_static_resource(template: &'static str) -> __I18NDynamicResourceValue {
-        __I18NDynamicResourceValue::new_static(template)
+    pub const fn new_static_resource(
+        display_text: &'static str,
+        template: &'static str,
+        expected_args: usize,
+        render: fn(&[String]) -> String,
+    ) -> __I18NDynamicResourceValue {
+        __I18NDynamicResourceValue::new_static(display_text, template, expected_args, render)
     }
 }
+
+impl PartialEq for __I18NDynamicResourceValue {
+    fn eq(&self, other: &Self) -> bool {
+        self.template == other.template
+            && self.expected_args == other.expected_args
+            && self.display_text == other.display_text
+    }
+}
+
+impl Eq for __I18NDynamicResourceValue {}
 
 impl PartialEq<str> for __I18NDynamicResourceValue {
     fn eq(&self, other: &str) -> bool {

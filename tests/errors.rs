@@ -20,14 +20,7 @@ mod fixtures {
 }
 
 #[test]
-fn returns_errors_for_invalid_templates_and_argument_mismatches() {
-    assert_eq!(
-        R::new("Hello {"),
-        Err(Error::InvalidTemplate {
-            template: "Hello {".to_string(),
-        })
-    );
-
+fn returns_errors_for_argument_mismatches() {
     let resource = fixtures::en::en().value.expect("resource should exist");
     assert_eq!(
         resource.with(()),
@@ -46,8 +39,5 @@ fn returns_an_error_when_target_and_fallback_are_missing_the_resource() {
         .get(ErrorUsage::Key::pt)
         .expect("locale access should succeed");
 
-    assert_eq!(
-        access.acquire(|_| None::<&rusty18n::R>),
-        Err(Error::MissingResource)
-    );
+    assert_eq!(access.acquire(|_| None::<&R>), Err(Error::MissingResource));
 }

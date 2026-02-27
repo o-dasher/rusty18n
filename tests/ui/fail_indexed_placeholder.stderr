@@ -1,0 +1,5 @@
+error: invalid template literal
+ --> tests/ui/fail_indexed_placeholder.rs:3:12
+  |
+3 |     value: "Hello {0}",
+  |            ^^^^^^^^^^^
