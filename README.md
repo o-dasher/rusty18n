@@ -47,8 +47,7 @@ to `String` internally.
 use rusty18n::define_i18n_fallback;
 
 define_i18n_fallback! {
-    I18NUsage =>
-    en
+    I18NUsage => en
     greetings {
         waves: "Waves",
         cool: "Hey that is cool",
@@ -66,9 +65,8 @@ use crate::i18n::I18NUsage;
 use rusty18n::define_i18n;
 
 define_i18n! {
-    I18NUsage =>
-    pt
-    greetings: {
+    I18NUsage => pt
+    greetings {
         waves: "Oi!",
     }
 }
@@ -81,8 +79,7 @@ pub mod en;
 pub mod pt;
 
 rusty18n::define_i18n_locales! {
-    I18NUsage =>
-    en|pt
+    I18NUsage => en|pt
 }
 ```
 

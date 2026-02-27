@@ -147,7 +147,7 @@ macro_rules! i18n_define_types {
 /// Applies locale overrides over a previously built fallback value.
 ///
 /// Supported override forms:
-/// - `field: { ... }` for nested objects
+/// - `field { ... }` for nested objects
 /// - `field: "text"` for static resources
 /// - `field: |a, b| => "{a} {b}"` for dynamic resources
 #[doc(hidden)]
@@ -155,7 +155,7 @@ macro_rules! i18n_define_types {
 macro_rules! i18n_apply_overrides {
     ($target:expr $(,)?) => {};
 
-    ($target:expr, $field:ident : { $($body:tt)* } $(, $($rest:tt)*)?) => {
+    ($target:expr, $field:ident { $($body:tt)* } $(, $($rest:tt)*)?) => {
         $crate::i18n_apply_overrides!(&mut ($target).$field, $($body)*);
         $crate::i18n_apply_overrides!($target $(, $($rest)*)?);
     };
@@ -215,7 +215,7 @@ macro_rules! define_i18n_fallback {
 /// runtime fallback in `I18NAccess::acquire`.
 ///
 /// Override forms:
-/// - `field: { ... }`
+/// - `field { ... }`
 /// - `field: "text"`
 /// - `field: |a, b, c| => "{a} {b} {c}"`
 ///
