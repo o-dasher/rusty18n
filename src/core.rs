@@ -29,19 +29,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub type I18NLocaleLoader<V> = fn() -> V;
 
 type I18NRenderFn = fn(&[String]) -> String;
-
-#[derive(Clone, Copy, Debug)]
-struct I18NRender(I18NRenderFn);
-
-const fn empty_render(_: &[String]) -> String {
-    String::new()
-}
-
-impl Default for I18NRender {
-    fn default() -> Self {
-        Self(empty_render)
-    }
-}
+type I18NRender = Option<I18NRenderFn>;
 
 /// Converts user-provided dynamic arguments into positional `String`s.
 ///
@@ -76,13 +64,13 @@ pub struct __I18NDynamicResourceValue {
     template: &'static str,
     #[cfg_attr(feature = "bevy_reflect", reflect(ignore))]
     expected_args: usize,
-    #[cfg_attr(feature = "bevy_reflect", reflect(ignore))]
-    render: I18NRender,
     /// Template text with escaped braces resolved.
     #[cfg_attr(feature = "bevy_reflect", reflect(ignore))]
     #[as_ref(forward)]
     #[deref(forward)]
     display_text: &'static str,
+    #[cfg_attr(feature = "bevy_reflect", reflect(ignore))]
+    render: I18NRender,
 }
 
 impl __I18NDynamicResourceValue {
@@ -96,8 +84,8 @@ impl __I18NDynamicResourceValue {
         Self {
             template,
             expected_args,
-            render: I18NRender(render),
             display_text,
+            render: Some(render),
         }
     }
 
@@ -128,7 +116,7 @@ impl __I18NDynamicResourceValue {
             });
         }
 
-        Ok((self.render.0)(&args))
+        Ok(self.render.unwrap_or(|_| String::new())(&args))
     }
 }
 
