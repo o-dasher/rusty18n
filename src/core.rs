@@ -63,7 +63,7 @@ impl I18NDynamicArgs for Tuple {
 #[cfg_attr(feature = "bevy_reflect", derive(Reflect))]
 #[display("{}", display_text)]
 #[doc(hidden)]
-pub struct __I18NDynamicResourceValue<M = ()> {
+pub struct I18NDynamicResourceValue<M = ()> {
     #[cfg_attr(feature = "bevy_reflect", reflect(ignore))]
     template: &'static str,
     /// Template text with escaped braces resolved.
@@ -75,9 +75,10 @@ pub struct __I18NDynamicResourceValue<M = ()> {
     render: I18NRender<M>,
 }
 
-impl<M> __I18NDynamicResourceValue<M> {
+impl<M> I18NDynamicResourceValue<M> {
+    #[doc(hidden)]
     #[must_use]
-    const fn new_static(
+    pub const fn new_static(
         display_text: &'static str,
         template: &'static str,
         render: I18NRenderFn<M>,
@@ -109,29 +110,15 @@ impl<M> __I18NDynamicResourceValue<M> {
     }
 }
 
-#[doc(hidden)]
-pub mod __private {
-    use super::{I18NRenderFn, __I18NDynamicResourceValue};
-
-    #[must_use]
-    pub const fn new_static_resource<M>(
-        display_text: &'static str,
-        template: &'static str,
-        render: I18NRenderFn<M>,
-    ) -> __I18NDynamicResourceValue<M> {
-        __I18NDynamicResourceValue::new_static(display_text, template, render)
-    }
-}
-
-impl<M> PartialEq for __I18NDynamicResourceValue<M> {
+impl<M> PartialEq for I18NDynamicResourceValue<M> {
     fn eq(&self, other: &Self) -> bool {
         self.template == other.template
     }
 }
 
-impl<M> Eq for __I18NDynamicResourceValue<M> {}
+impl<M> Eq for I18NDynamicResourceValue<M> {}
 
-impl<M> PartialEq<str> for __I18NDynamicResourceValue<M> {
+impl<M> PartialEq<str> for I18NDynamicResourceValue<M> {
     fn eq(&self, other: &str) -> bool {
         self.display_text == other
     }

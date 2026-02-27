@@ -159,7 +159,7 @@ fn build_resource_tokens(crate_path: &Path, literal: &LitStr, spec: TemplateSpec
     };
 
     quote! {
-        #crate_path::__private::new_static_resource::<#marker>(#display_text, #template, #render)
+        #crate_path::I18NDynamicResourceValue::<#marker>::new_static(#display_text, #template, #render)
     }
     .into()
 }

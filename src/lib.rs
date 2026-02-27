@@ -21,4 +21,4 @@ pub use rusty18n_macros::__i18n_resource_type;
 pub type R<M = ()> = I18NDynamicResource<M>;
 
 /// Dynamic i18n resource type.
-pub type I18NDynamicResource<M = ()> = crate::core::__I18NDynamicResourceValue<M>;
+pub type I18NDynamicResource<M = ()> = crate::core::I18NDynamicResourceValue<M>;
