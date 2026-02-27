@@ -28,30 +28,16 @@ mod fixtures {
 }
 
 #[test]
-fn supports_nested_blocks() {
+fn supports_nested_blocks() -> rusty18n::Result<()> {
     let locales = I18NUsage::locales();
 
-    let en = locales
-        .get(I18NUsage::Key::en)
-        .expect("en locale should exist");
-    assert_eq!(
-        rusty18n::t!(en.greetings.waves).map(std::convert::AsRef::as_ref),
-        Ok("Waves")
-    );
-    assert_eq!(
-        rusty18n::t!(en.greetings.oi.a).map(std::convert::AsRef::as_ref),
-        Ok("English nested")
-    );
+    let en = locales.get(I18NUsage::Key::en)?;
+    assert_eq!(rusty18n::t!(en.greetings.waves)?, "Waves");
+    assert_eq!(rusty18n::t!(en.greetings.oi.a)?, "English nested");
 
-    let pt = locales
-        .get(I18NUsage::Key::pt)
-        .expect("pt locale access should be available");
-    assert_eq!(
-        rusty18n::t!(pt.greetings.waves).map(std::convert::AsRef::as_ref),
-        Ok("Waves")
-    );
-    assert_eq!(
-        rusty18n::t!(pt.greetings.oi.a).map(std::convert::AsRef::as_ref),
-        Ok("Portuguese nested")
-    );
+    let pt = locales.get(I18NUsage::Key::pt)?;
+    assert_eq!(rusty18n::t!(pt.greetings.waves)?, "Waves");
+    assert_eq!(rusty18n::t!(pt.greetings.oi.a)?, "Portuguese nested");
+
+    Ok(())
 }

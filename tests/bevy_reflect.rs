@@ -36,47 +36,45 @@ mod fixtures {
 #[test]
 fn reflects_sparse_locale_values_by_path() {
     let pt = fixtures::pt::pt();
-
     assert_eq!(
         pt.by_path::<R>("greetings.nested")
-            .map(std::convert::AsRef::as_ref),
-        Some("Portuguese nested")
+            .expect("nested resource should exist"),
+        "Portuguese nested"
     );
     assert_eq!(
         pt.by_path::<R>("messages.translated")
-            .map(std::convert::AsRef::as_ref),
-        Some("Portuguese translated")
+            .expect("translated resource should exist"),
+        "Portuguese translated"
     );
     assert!(pt.by_path::<R>("greetings.waves").is_none());
     assert!(pt.by_path::<R>("messages.literal").is_none());
 }
 
 #[test]
-fn reflects_access_values_with_fallback() {
+fn reflects_access_values_with_fallback() -> rusty18n::Result<()> {
     let locales = I18NUsage::locales();
-    let pt = locales
-        .get(I18NUsage::Key::pt)
-        .expect("locale access should succeed");
-
+    let pt = locales.get(I18NUsage::Key::pt)?;
     assert_eq!(
         pt.by_path::<R>("greetings.waves")
-            .map(std::convert::AsRef::as_ref),
-        Some("Waves")
+            .expect("fallback waves should exist"),
+        "Waves"
     );
     assert_eq!(
         pt.by_path::<R>("greetings.nested")
-            .map(std::convert::AsRef::as_ref),
-        Some("Portuguese nested")
+            .expect("nested resource should exist"),
+        "Portuguese nested"
     );
     assert_eq!(
         pt.by_path::<R>("messages.literal")
-            .map(std::convert::AsRef::as_ref),
-        Some("Fallback literal")
+            .expect("fallback literal should exist"),
+        "Fallback literal"
     );
     assert_eq!(
         pt.by_path::<R>("messages.translated")
-            .map(std::convert::AsRef::as_ref),
-        Some("Portuguese translated")
+            .expect("translated resource should exist"),
+        "Portuguese translated"
     );
     assert!(pt.by_path::<R>("messages.missing").is_none());
+
+    Ok(())
 }
