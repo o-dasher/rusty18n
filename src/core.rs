@@ -1,10 +1,35 @@
 #[cfg(feature = "bevy_reflect")]
 use bevy_reflect::Reflect;
+use impl_trait_for_tuples::impl_for_tuples;
+use std::fmt::Display;
 use std::{collections::HashMap, hash::Hash};
 
 #[cfg(feature = "bevy_reflect")]
 fn default_dynamic_resource<A>() -> fn(A) -> String {
     |_args: A| String::new()
+}
+
+/// Converts user-provided dynamic arguments into an internal tuple of `String`s.
+///
+/// This enables ergonomic calls such as:
+/// `dynamic.with((1, "name", 3.5))`
+/// for resources that internally use `(String, String, String)`.
+pub trait IntoDynamicResourceArgs {
+    /// Internal dynamic argument tuple used by `I18NDynamicResource`.
+    type Output;
+
+    /// Converts `self` into the internal argument tuple expected by the dynamic resource.
+    fn into_dynamic_resource_args(self) -> Self::Output;
+}
+
+#[impl_for_tuples(1, 16)]
+#[tuple_types_no_default_trait_bound]
+impl IntoDynamicResourceArgs for Tuple {
+    for_tuples!( where #( Tuple: Display )* );
+    for_tuples!( type Output = ( #( String ),* ); );
+    fn into_dynamic_resource_args(self) -> Self::Output {
+        for_tuples!( ( #( self.Tuple.to_string() ),* ) )
+    }
 }
 
 /// A struct representing an internationalization (i18n) dynamic resource.
@@ -21,19 +46,24 @@ pub struct I18NDynamicResource<A> {
 }
 
 impl<A> I18NDynamicResource<A> {
+    /// Creates a new dynamic resource with the provided renderer function.
     pub fn new(caller: fn(A) -> String) -> Self {
         Self { caller }
     }
 
-    /// Invokes the caller function with the provided arguments and returns the resulting string.
+    /// Invokes the dynamic resource with user-provided arguments.
     ///
     /// # Arguments
-    /// * `args` - Arguments of type `A` to be passed to the caller function.
+    /// * `args` - Arguments that can be converted into the internal tuple type `A`.
+    ///   Each tuple item must implement `Display`.
     ///
     /// # Returns
     /// A string representing the localized resource.
-    pub fn with(&self, args: A) -> String {
-        (self.caller)(args)
+    pub fn with<T>(&self, args: T) -> String
+    where
+        T: IntoDynamicResourceArgs<Output = A>,
+    {
+        (self.caller)(args.into_dynamic_resource_args())
     }
 }
 

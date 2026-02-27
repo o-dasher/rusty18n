@@ -22,8 +22,7 @@ fn main() {
     t_prefix!($wah, i18n);
 
     let response_static = wah!(greetings.waves);
-    let response_dynamic =
-        wah!(calculus.answers).with((a.to_string(), b.to_string(), result.to_string()));
+    let response_dynamic = wah!(calculus.answers).with((a, b, result));
 
     println!("{}", response_static);
     println!("{}", response_dynamic);
