@@ -79,7 +79,7 @@ impl<L: I18NTrait> I18NAccess<'_, L> {
     ///
     /// # Arguments
     /// * `accessing` - A function that takes a reference to an i18n value and returns
-    ///                 an optional reference to the desired resource.
+    ///   an optional reference to the desired resource.
     ///
     /// # Returns
     /// A reference to the acquired resource.
@@ -156,7 +156,7 @@ where
     ///
     /// # Returns
     /// An `I18NAccess` object providing access to the i18n resource for the specified locale.
-    pub fn get(&self, locale: K) -> I18NAccess<Self> {
+    pub fn get(&self, locale: K) -> I18NAccess<'_, Self> {
         I18NAccess {
             fallback: self.ref_default(),
             to: self.ref_any(locale),
