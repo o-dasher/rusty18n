@@ -233,6 +233,7 @@ macro_rules! define_i18n {
 /// - `pub type I18NUsage::Value = <default_locale_type>`
 /// - `pub enum I18NUsage::Key { en, pt, ... }`
 /// - `pub fn I18NUsage::locales() -> I18NWrapper<I18NUsage::Key, I18NUsage::Value>`
+/// - `pub fn I18NUsage::locales_dynamic() -> I18NWrapper<I18NUsage::Key, I18NUsage::Value>`
 #[macro_export]
 macro_rules! define_i18n_locales {
     (
@@ -257,6 +258,15 @@ macro_rules! define_i18n_locales {
 
                 pub fn locales() -> $crate::I18NWrapper<Key, Value> {
                     $crate::I18NWrapper::new(vec![
+                        (Key::$default_locale_mod, super::$default_locale_mod::[<$default_locale_mod:snake>]),
+                        $(
+                            (Key::$locale_mod, super::$locale_mod::[<$locale_mod:snake>]),
+                        )*
+                    ])
+                }
+
+                pub fn locales_dynamic() -> $crate::I18NWrapper<Key, Value> {
+                    $crate::I18NWrapper::new_dynamic(vec![
                         (Key::$default_locale_mod, super::$default_locale_mod::[<$default_locale_mod:snake>]),
                         $(
                             (Key::$locale_mod, super::$locale_mod::[<$locale_mod:snake>]),

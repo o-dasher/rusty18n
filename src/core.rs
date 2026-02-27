@@ -233,6 +233,7 @@ impl<L: I18NTrait> I18NAccess<'_, L> {
 #[derive(Debug)]
 pub struct I18NWrapper<K: Eq + Hash + Default + Copy, V: I18NFallback> {
     pub store: I18NStore<Self>,
+    loaders: HashMap<K, fn() -> V>,
     fallback: V,
 }
 
@@ -254,14 +255,113 @@ where
     /// A new `I18NWrapper` instance.
     #[must_use]
     pub fn new(store: Vec<(K, fn() -> V)>) -> Self {
-        let mut store = I18NStore::from(store);
+        let mut wrapper = Self::new_dynamic(store);
+        wrapper.load_all();
+        wrapper
+            .store
+            .0
+            .entry(K::default())
+            .or_insert_with(V::fallback);
+        wrapper
+    }
 
-        store.0.insert(K::default(), V::fallback());
-
+    /// Constructs a new `I18NWrapper` with locale loaders, without eagerly loading them.
+    ///
+    /// This is useful in constrained environments that only want to keep selected locales
+    /// resident in memory.
+    ///
+    /// # Arguments
+    /// * `loaders` - A vector of locale keys and locale constructor functions.
+    ///
+    /// # Returns
+    /// A new `I18NWrapper` instance with an empty loaded locale store.
+    #[must_use]
+    pub fn new_dynamic(loaders: Vec<(K, fn() -> V)>) -> Self {
         Self {
-            store,
+            store: I18NStore(HashMap::new()),
+            loaders: loaders.into_iter().collect(),
             fallback: V::fallback(),
         }
+    }
+
+    /// Registers or replaces a locale loader.
+    ///
+    /// # Arguments
+    /// * `locale` - The locale key to register.
+    /// * `loader` - A constructor function for the locale value.
+    ///
+    /// # Returns
+    /// The previously registered loader for the locale, if any.
+    pub fn register_locale(&mut self, locale: K, loader: fn() -> V) -> Option<fn() -> V> {
+        self.loaders.insert(locale, loader)
+    }
+
+    /// Unregisters a locale loader and unloads that locale if it is currently loaded.
+    ///
+    /// # Arguments
+    /// * `locale` - The locale key to unregister.
+    ///
+    /// # Returns
+    /// The previously registered loader for the locale, if any.
+    pub fn unregister_locale(&mut self, locale: K) -> Option<fn() -> V> {
+        self.store.0.remove(&locale);
+        self.loaders.remove(&locale)
+    }
+
+    /// Loads a single locale into memory using its registered loader.
+    ///
+    /// # Arguments
+    /// * `locale` - The locale key to load.
+    ///
+    /// # Returns
+    /// `true` if the locale had a registered loader and is now loaded.
+    #[must_use]
+    pub fn load(&mut self, locale: K) -> bool {
+        self.loaders.get(&locale).copied().is_some_and(|load| {
+            self.store.0.insert(locale, load());
+            true
+        })
+    }
+
+    /// Loads all registered locales into memory.
+    pub fn load_all(&mut self) {
+        let loaders = self
+            .loaders
+            .iter()
+            .map(|(&locale, &load)| (locale, load))
+            .collect::<Vec<_>>();
+
+        for (locale, load) in loaders {
+            self.store.0.insert(locale, load());
+        }
+    }
+
+    /// Unloads a single locale from memory.
+    ///
+    /// # Arguments
+    /// * `locale` - The locale key to unload.
+    ///
+    /// # Returns
+    /// The previously loaded locale value, if it was loaded.
+    pub fn unload(&mut self, locale: K) -> Option<V> {
+        self.store.0.remove(&locale)
+    }
+
+    /// Unloads all currently loaded locales.
+    pub fn unload_all(&mut self) {
+        self.store.0.clear();
+    }
+
+    /// Returns whether a locale is currently loaded.
+    #[must_use]
+    pub fn is_loaded(&self, locale: K) -> bool {
+        self.store.0.contains_key(&locale)
+    }
+
+    /// Returns whether a locale has a registered loader.
+    #[must_use]
+    pub fn is_registered(&self, locale: K) -> bool {
+        self.loaders.contains_key(&locale)
     }
 
     /// Gets a reference to the default i18n resource.
