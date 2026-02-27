@@ -13,3 +13,4 @@ proc-macro = true
 proc-macro2 = "1.0.93"
 quote = "1.0.38"
 syn = "2.0.98"
+winnow = "0.7.13"

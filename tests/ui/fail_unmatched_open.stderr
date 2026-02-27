@@ -1,5 +1,0 @@
-error: invalid template literal
- --> tests/ui/fail_unmatched_open.rs:3:12
-  |
-3 |     value: "Hello {",
-  |            ^^^^^^^^^

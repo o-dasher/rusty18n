@@ -2,12 +2,25 @@ use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::quote;
 use syn::{parse_macro_input, Error, Index, LitInt, LitStr};
+use winnow::{
+    combinator::{alt, delimited, repeat},
+    error::ModalResult,
+    token::take_while,
+    Parser,
+};
 
 struct TemplateSpec {
     display_text: String,
     render_format: String,
     expected_args: usize,
     render_indices: Vec<usize>,
+}
+
+#[derive(Clone, Copy)]
+enum TemplatePart<'a> {
+    Text(&'a str),
+    Escaped(char),
+    Placeholder(&'a str),
 }
 
 #[proc_macro]
@@ -22,56 +35,30 @@ pub fn __i18n_build_resource(input: TokenStream) -> TokenStream {
 
 fn parse_template(literal: &LitStr) -> syn::Result<TemplateSpec> {
     let template = literal.value();
-    let bytes = template.as_bytes();
     let mut display_text = String::with_capacity(template.len());
     let mut render_format = String::with_capacity(template.len());
     let mut placeholders = Vec::new();
     let mut render_indices = Vec::new();
-    let mut index = 0;
-    let mut text_start = 0;
+    let parts = repeat::<_, _, Vec<_>, _, _>(0.., template_part)
+        .parse(template.as_str())
+        .map_err(|_| Error::new_spanned(literal, "invalid template literal"))?;
 
-    while index < bytes.len() {
-        match bytes[index] {
-            b'{' if index + 1 < bytes.len() && bytes[index + 1] == b'{' => {
-                push_text_segment(
-                    &template,
-                    text_start,
-                    index,
-                    &mut display_text,
-                    &mut render_format,
-                );
-                display_text.push('{');
-                render_format.push_str("{{");
-                index += 2;
-                text_start = index;
+    for part in parts {
+        match part {
+            TemplatePart::Text(text) => {
+                display_text.push_str(text);
+                render_format.push_str(text);
             }
-            b'}' if index + 1 < bytes.len() && bytes[index + 1] == b'}' => {
-                push_text_segment(
-                    &template,
-                    text_start,
-                    index,
-                    &mut display_text,
-                    &mut render_format,
-                );
-                display_text.push('}');
-                render_format.push_str("}}");
-                index += 2;
-                text_start = index;
+            TemplatePart::Escaped(ch) => {
+                display_text.push(ch);
+                render_format.push(match ch {
+                    '{' => '{',
+                    '}' => '}',
+                    _ => ch,
+                });
+                render_format.push(ch);
             }
-            b'{' => {
-                push_text_segment(
-                    &template,
-                    text_start,
-                    index,
-                    &mut display_text,
-                    &mut render_format,
-                );
-
-                let placeholder_end = find_placeholder_end(bytes, index, literal)?;
-                let name = &template[index + 1..placeholder_end];
-
-                validate_identifier(name, literal)?;
-
+            TemplatePart::Placeholder(name) => {
                 let placeholder_index = placeholders
                     .iter()
                     .position(|candidate: &String| candidate == name)
@@ -85,24 +72,9 @@ fn parse_template(literal: &LitStr) -> syn::Result<TemplateSpec> {
                 display_text.push('}');
                 render_format.push_str("{}");
                 render_indices.push(placeholder_index);
-
-                index = placeholder_end + 1;
-                text_start = index;
             }
-            b'}' => {
-                return Err(Error::new_spanned(literal, "invalid template literal"));
-            }
-            _ => index += 1,
         }
     }
-
-    push_text_segment(
-        &template,
-        text_start,
-        template.len(),
-        &mut display_text,
-        &mut render_format,
-    );
 
     Ok(TemplateSpec {
         display_text,
@@ -112,57 +84,31 @@ fn parse_template(literal: &LitStr) -> syn::Result<TemplateSpec> {
     })
 }
 
-fn push_text_segment(
-    template: &str,
-    start: usize,
-    end: usize,
-    display_text: &mut String,
-    render_format: &mut String,
-) {
-    if start < end {
-        let segment = &template[start..end];
-        display_text.push_str(segment);
-        render_format.push_str(segment);
-    }
+fn template_part<'a>(input: &mut &'a str) -> ModalResult<TemplatePart<'a>> {
+    alt((
+        "{{".value(TemplatePart::Escaped('{')),
+        "}}".value(TemplatePart::Escaped('}')),
+        delimited('{', identifier, '}').map(TemplatePart::Placeholder),
+        take_while(1.., |ch: char| ch != '{' && ch != '}').map(TemplatePart::Text),
+    ))
+    .parse_next(input)
 }
 
-fn find_placeholder_end(
-    bytes: &[u8],
-    opening_brace: usize,
-    literal: &LitStr,
-) -> syn::Result<usize> {
-    let mut index = opening_brace + 1;
-
-    while index < bytes.len() && bytes[index] != b'}' {
-        if bytes[index] == b'{' {
-            return Err(Error::new_spanned(literal, "invalid template literal"));
-        }
-
-        index += 1;
-    }
-
-    if index >= bytes.len() || index == opening_brace + 1 {
-        Err(Error::new_spanned(literal, "invalid template literal"))
-    } else {
-        Ok(index)
-    }
+fn identifier<'a>(input: &mut &'a str) -> ModalResult<&'a str> {
+    (
+        take_while(1..=1, is_identifier_start),
+        take_while(0.., is_identifier_continue),
+    )
+        .take()
+        .parse_next(input)
 }
 
-fn validate_identifier(identifier: &str, literal: &LitStr) -> syn::Result<()> {
-    let mut bytes = identifier.bytes();
-    let Some(first) = bytes.next() else {
-        return Err(Error::new_spanned(literal, "invalid template literal"));
-    };
+const fn is_identifier_start(ch: char) -> bool {
+    ch == '_' || ch.is_ascii_alphabetic()
+}
 
-    if !(first == b'_' || first.is_ascii_alphabetic()) {
-        return Err(Error::new_spanned(literal, "invalid template literal"));
-    }
-
-    if bytes.all(|byte| byte == b'_' || byte.is_ascii_alphanumeric()) {
-        Ok(())
-    } else {
-        Err(Error::new_spanned(literal, "invalid template literal"))
-    }
+const fn is_identifier_continue(ch: char) -> bool {
+    ch == '_' || ch.is_ascii_alphanumeric()
 }
 
 fn build_tokens(literal: &LitStr, spec: TemplateSpec) -> TokenStream {

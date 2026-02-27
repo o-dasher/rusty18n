@@ -19,9 +19,6 @@ paste = "1.0.15"
 rusty18n_macros = { path = "rusty18n_macros" }
 thiserror = "1"
 
-[dev-dependencies]
-trybuild = "1.0.104"
-
 [workspace]
 members = [
     "example",
