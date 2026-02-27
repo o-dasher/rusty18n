@@ -1,12 +1,11 @@
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+    systems.url = "github:nix-systems/default";
     flake-parts = {
       url = "github:hercules-ci/flake-parts";
       inputs.nixpkgs-lib.follows = "nixpkgs";
     };
-
     fenix = {
       url = "github:nix-community/fenix";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -14,29 +13,23 @@
   };
 
   outputs =
-    { fenix, flake-parts, ... }@inputs:
+    {
+      fenix,
+      flake-parts,
+      systems,
+      ...
+    }@inputs:
     flake-parts.lib.mkFlake { inherit inputs; } {
-      systems = [
-        "x86_64-linux"
-        "aarch64-linux"
-      ];
-
+      systems = import systems;
       perSystem =
         { pkgs, system, ... }:
-        let
-          toolchain = fenix.packages.${system}.stable;
-        in
         {
           devShells.default = pkgs.mkShell {
             packages =
-              (with pkgs; [ nixfmt-rfc-style ])
-              ++ (with toolchain; [
-                clippy
-                rustfmt
+              (with pkgs; [ nixfmt ])
+              ++ (with fenix.packages.${system}; [
+                complete.toolchain
                 rust-analyzer
-                rust-src
-                rustc
-                cargo
               ]);
           };
         };
