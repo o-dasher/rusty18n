@@ -119,12 +119,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "deep-struct-update"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e66e65255683120ac844025796622ed77ae5ada2ccb9a15e48bce9a9b61ffcfc"
-
-[[package]]
 name = "downcast-rs"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -149,7 +143,6 @@ dependencies = [
 name = "example"
 version = "0.1.0"
 dependencies = [
- "deep-struct-update",
  "merge-struct",
  "nestruct",
  "paste",
@@ -324,7 +317,7 @@ checksum = "08d43f7aa6b08d49f382cde6a7982047c3426db949b1424bc4b7ec9ae12c6ce2"
 
 [[package]]
 name = "rusty18n"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "bevy_reflect",
 ]

@@ -12,15 +12,11 @@ static translations to dynamic ones.
 You just need to do add some dependencies to your project:
 ```
 cargo add rusty18n
-cargo add deep_struct_update
 ```
 
-`deep_struct_update` is used so you can write partial i18n implementations for languages that are
+`define_i18n` lets you write partial i18n implementations for languages that are
 still being working on, like in the example:
 ```rs
-// We need to import deep_struct_update before we can use the define_i18n macro
-use deep_struct_update;
-
 pub fn i18n_ptbr() -> I18NUsage {
     // Using the define_i18n macro we don't need to change all the i18n implementations once
     // something in the base fallback implementation structure changes.

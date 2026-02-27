@@ -1,8 +1,5 @@
 use crate::i18n::i_18_n_usage::I18NUsage;
-use rusty18n::{define_i18n, r, I18NFallback};
-
-// We need to import deep_struct_update before we can use the define_i18n macro
-use deep_struct_update;
+use rusty18n::{define_i18n, r};
 
 pub fn i18n_ptbr() -> I18NUsage {
     // Using the define_i18n macro we don't need to change all the i18n implementations once
