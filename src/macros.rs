@@ -96,7 +96,7 @@ macro_rules! i18n_define_types {
 
     (@collect [$type_name:ident] [$($fields:tt)*] [$($nested_defs:tt)*]) => {
         $($nested_defs)*
-        #[derive(Debug)]
+        #[derive(Debug, Default)]
         pub struct $type_name {
             $($fields)*
         }
@@ -201,7 +201,10 @@ macro_rules! define_i18n_fallback {
     };
 }
 
-/// Creates a locale value by applying DSL overrides over fallback.
+/// Creates a sparse locale value by applying DSL overrides over defaults.
+///
+/// Fields not explicitly overridden remain `None` and are resolved through
+/// runtime fallback in `I18NAccess::acquire`.
 ///
 /// Override forms:
 /// - `field: { ... }`
@@ -210,9 +213,9 @@ macro_rules! define_i18n_fallback {
 #[macro_export]
 macro_rules! define_i18n {
     ($base_i18n:path, $($body:tt)*) => {{
-        let mut base_i18n = <$base_i18n as $crate::I18NFallback>::fallback();
-        $crate::i18n_apply_overrides!(&mut base_i18n, $($body)*);
-        base_i18n
+        let mut locale_i18n = <$base_i18n as ::core::default::Default>::default();
+        $crate::i18n_apply_overrides!(&mut locale_i18n, $($body)*);
+        locale_i18n
     }};
 }
 
