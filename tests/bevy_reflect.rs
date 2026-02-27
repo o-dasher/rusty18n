@@ -1,102 +1,82 @@
 #![cfg(feature = "bevy_reflect")]
 
-use bevy_reflect::Reflect;
-use rusty18n::{I18NFallback, I18NReflected, I18NWrapper};
+use crate::fixtures::I18NUsage;
+use rusty18n::{I18NReflected, R};
 
-#[derive(Debug, Default, Reflect)]
-struct Greetings {
-    waves: Option<String>,
-    nested: Option<String>,
-}
+mod fixtures {
+    rusty18n::define_i18n_locales! { I18NUsage => en|pt }
 
-#[derive(Debug, Default, Reflect)]
-struct Messages {
-    literal: Option<String>,
-    translated: Option<String>,
-}
-
-#[derive(Debug, Default, Reflect)]
-struct FixtureI18n {
-    greetings: Greetings,
-    messages: Messages,
-}
-
-impl I18NFallback for FixtureI18n {
-    fn fallback() -> rusty18n::Result<Self> {
-        Ok(Self {
-            greetings: Greetings {
-                waves: Some("Waves".to_string()),
-                nested: Some("Fallback nested".to_string()),
+    pub mod en {
+        rusty18n::define_i18n_fallback! {
+            I18NUsage => en
+            greetings: {
+                waves: "Waves",
+                nested: "Fallback nested",
             },
-            messages: Messages {
-                literal: Some("Fallback literal".to_string()),
-                translated: Some("Fallback translated".to_string()),
+            messages: {
+                literal: "Fallback literal",
+                translated: "Fallback translated",
             },
-        })
+        }
     }
-}
 
-#[derive(Debug, Default, Clone, Copy, Eq, PartialEq, Hash)]
-enum Locale {
-    #[default]
-    En,
-    Pt,
-}
-
-fn pt() -> FixtureI18n {
-    FixtureI18n {
-        greetings: Greetings {
-            nested: Some("Portuguese nested".to_string()),
-            ..Default::default()
-        },
-        messages: Messages {
-            translated: Some("Portuguese translated".to_string()),
-            ..Default::default()
-        },
+    pub mod pt {
+        rusty18n::define_i18n! {
+            super::I18NUsage => pt
+            greetings: {
+                nested: "Portuguese nested",
+            },
+            messages: {
+                translated: "Portuguese translated",
+            }
+        }
     }
 }
 
 #[test]
 fn reflects_sparse_locale_values_by_path() {
-    let pt = pt();
+    let pt = fixtures::pt::pt().expect("locale construction should succeed");
 
     assert_eq!(
-        pt.by_path::<String>("greetings.nested").map(String::as_str),
+        pt.by_path::<R>("greetings.nested")
+            .map(std::convert::AsRef::as_ref),
         Some("Portuguese nested")
     );
     assert_eq!(
-        pt.by_path::<String>("messages.translated")
-            .map(String::as_str),
+        pt.by_path::<R>("messages.translated")
+            .map(std::convert::AsRef::as_ref),
         Some("Portuguese translated")
     );
-    assert!(pt.by_path::<String>("greetings.waves").is_none());
-    assert!(pt.by_path::<String>("messages.literal").is_none());
+    assert!(pt.by_path::<R>("greetings.waves").is_none());
+    assert!(pt.by_path::<R>("messages.literal").is_none());
 }
 
 #[test]
 fn reflects_access_values_with_fallback() {
-    let locales = I18NWrapper::<Locale, FixtureI18n>::new(vec![(Locale::Pt, pt())])
-        .expect("locale construction should succeed");
+    let locales = I18NUsage::locales().expect("locale construction should succeed");
     let pt = locales
-        .get(Locale::Pt)
+        .get(I18NUsage::Key::pt)
         .expect("locale access should succeed");
 
     assert_eq!(
-        pt.by_path::<String>("greetings.waves").map(String::as_str),
+        pt.by_path::<R>("greetings.waves")
+            .map(std::convert::AsRef::as_ref),
         Some("Waves")
     );
     assert_eq!(
-        pt.by_path::<String>("greetings.nested").map(String::as_str),
+        pt.by_path::<R>("greetings.nested")
+            .map(std::convert::AsRef::as_ref),
         Some("Portuguese nested")
     );
     assert_eq!(
-        pt.by_path::<String>("messages.literal").map(String::as_str),
+        pt.by_path::<R>("messages.literal")
+            .map(std::convert::AsRef::as_ref),
         Some("Fallback literal")
     );
     assert_eq!(
-        pt.by_path::<String>("messages.translated")
-            .map(String::as_str),
+        pt.by_path::<R>("messages.translated")
+            .map(std::convert::AsRef::as_ref),
         Some("Portuguese translated")
     );
-    assert!(pt.by_path::<String>("messages.missing").is_none());
+    assert!(pt.by_path::<R>("messages.missing").is_none());
 }

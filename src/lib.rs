@@ -6,6 +6,8 @@ pub use crate::core::*;
 
 #[cfg(feature = "bevy_reflect")]
 pub use crate::reflect::*;
+#[cfg(feature = "bevy_reflect")]
+pub use bevy_reflect::Reflect;
 
 /// Default generated i18n resource type.
 ///

@@ -4,6 +4,30 @@
 /// - `"text"` => `Option<R>`
 /// - `"text with {placeholders}"` => `Option<R>`
 #[doc(hidden)]
+#[cfg(feature = "bevy_reflect")]
+#[macro_export]
+macro_rules! i18n_define_struct {
+    ($type_name:ident { $($fields:tt)* }) => {
+        #[derive(Debug, Default, $crate::Reflect)]
+        pub struct $type_name {
+            $($fields)*
+        }
+    };
+}
+
+#[doc(hidden)]
+#[cfg(not(feature = "bevy_reflect"))]
+#[macro_export]
+macro_rules! i18n_define_struct {
+    ($type_name:ident { $($fields:tt)* }) => {
+        #[derive(Debug, Default)]
+        pub struct $type_name {
+            $($fields)*
+        }
+    };
+}
+
+#[doc(hidden)]
 #[macro_export]
 macro_rules! i18n_leaf_expr {
     ($lit:literal) => {
@@ -77,10 +101,9 @@ macro_rules! i18n_define_types {
 
     (@collect [$type_name:ident] [$($fields:tt)*] [$($nested_defs:tt)*]) => {
         $($nested_defs)*
-        #[derive(Debug, Default)]
-        pub struct $type_name {
+        $crate::i18n_define_struct!($type_name {
             $($fields)*
-        }
+        });
     };
 
     (@collect [$type_name:ident] [$($fields:tt)*] [$($nested_defs:tt)*] $field:ident { $($nested:tt)* } $(, $($rest:tt)*)?) => {

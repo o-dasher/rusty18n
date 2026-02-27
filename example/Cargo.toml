@@ -9,6 +9,7 @@ workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+bevy_reflect = "0.12.1"
 merge-struct = "0.1.0"
 paste = "1.0.15"
 rusty18n = { path = "../" }
