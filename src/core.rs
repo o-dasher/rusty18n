@@ -2,13 +2,14 @@
 use bevy_reflect::Reflect;
 use derive_more::derive::{AsRef, Deref, Display as DeriveDisplay};
 use impl_trait_for_tuples::impl_for_tuples;
-use nom::branch::alt;
-use nom::bytes::complete::{is_not, tag};
-use nom::combinator::{iterator, map};
-use nom::sequence::delimited;
-use nom::IResult;
-use std::fmt::Display;
-use std::{collections::HashMap, hash::Hash};
+use nom::{
+    branch::alt,
+    bytes::complete::{is_not, tag},
+    combinator::{iterator, map},
+    sequence::delimited,
+    IResult,
+};
+use std::{collections::HashMap, fmt::Display, hash::Hash};
 
 /// Converts user-provided dynamic arguments into positional `String`s.
 ///
@@ -27,9 +28,9 @@ impl IntoDynamicResourceArgs for Tuple {
     for_tuples!( where #( Tuple: Display )* );
 
     fn into_dynamic_resource_args(self) -> Vec<String> {
-        [for_tuples!( #( self.Tuple.to_string() ),* )]
-            .into_iter()
-            .collect()
+        let mut args = Vec::new();
+        for_tuples!( #( args.extend(std::iter::once(self.Tuple.to_string())); )* );
+        args
     }
 }
 
@@ -40,7 +41,7 @@ enum TemplatePart<'a> {
     Placeholder(&'a str),
 }
 
-fn template_part<'a>(input: &'a str) -> IResult<&'a str, TemplatePart<'a>> {
+fn template_part(input: &str) -> IResult<&str, TemplatePart<'_>> {
     alt((
         map(tag("{{"), |_| TemplatePart::Escaped('{')),
         map(tag("}}"), |_| TemplatePart::Escaped('}')),
@@ -88,13 +89,13 @@ fn render_template(template: &str, args: &[String], display_text: &str) -> Strin
         TemplatePart::Text(text) => rendered.push_str(text),
         TemplatePart::Escaped(ch) => rendered.push(ch),
         TemplatePart::Placeholder(name) => {
-            let index =
-                if let Some(index) = placeholders.iter().position(|candidate| *candidate == name) {
-                    index
-                } else {
+            let index = placeholders
+                .iter()
+                .position(|candidate| *candidate == name)
+                .unwrap_or_else(|| {
                     placeholders.push(name);
                     placeholders.len() - 1
-                };
+                });
 
             let value = args.get(index).unwrap_or_else(|| {
                 panic!(
@@ -137,6 +138,7 @@ impl __I18NDynamicResourceValue {
     ///
     /// Positional arguments passed to `.with((...))` are matched by first appearance.
     /// Use `{{` and `}}` to render literal braces.
+    #[must_use]
     pub fn new(template: &str) -> Self {
         let display_text = normalize_template(template);
 
@@ -173,6 +175,7 @@ impl PartialEq<str> for __I18NDynamicResourceValue {
 }
 
 /// A trait for defining fallback behavior in internationalization (i18n).
+///
 /// It should be used when defining the main i18n component, it will be used
 /// when a given i18n resource tries to be acquired but isn't present for the
 /// given locale at that moment.
@@ -186,7 +189,7 @@ pub trait I18NTrait {
     type V: I18NFallback;
 }
 
-/// The I18NStore wraps a HashMap that maps key value pairs of Locale keys and localized
+/// The `I18NStore` wraps a `HashMap` that maps key value pairs of Locale keys and localized
 /// implementations.
 #[derive(Debug)]
 pub struct I18NStore<L: I18NTrait>(pub HashMap<L::K, L::V>);
@@ -218,6 +221,9 @@ impl<L: I18NTrait> I18NAccess<'_, L> {
     ///
     /// # Returns
     /// A reference to the acquired resource.
+    ///
+    /// # Panics
+    /// Panics if neither the target nor the fallback contains the requested resource.
     pub fn acquire<R>(&self, accessing: fn(&L::V) -> Option<&R>) -> &R {
         accessing(self.to).unwrap_or_else(|| accessing(self.fallback).unwrap())
     }
@@ -246,6 +252,7 @@ where
     ///
     /// # Returns
     /// A new `I18NWrapper` instance.
+    #[must_use]
     pub fn new(store: Vec<(K, fn() -> V)>) -> Self {
         let mut store = I18NStore::from(store);
 
@@ -258,7 +265,7 @@ where
     }
 
     /// Gets a reference to the default i18n resource.
-    fn ref_default(&self) -> &V {
+    const fn ref_default(&self) -> &V {
         &self.fallback
     }
 

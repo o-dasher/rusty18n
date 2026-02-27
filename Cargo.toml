@@ -7,6 +7,9 @@ repository = "https://github.com/o-dasher/rusty18n.git"
 description = "A simply yet efficient i18n solution for Rust."
 license = "MIT"
 
+[lints]
+workspace = true
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
 bevy_reflect = {version="0.12.1", optional=true}
@@ -19,3 +22,8 @@ paste = "1.0.15"
 members = [
     "example",
 ]
+
+[workspace.lints.clippy]
+all = "warn"
+pedantic = "warn"
+nursery = "warn"
