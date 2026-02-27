@@ -1,19 +1,13 @@
 /// Builds a fallback leaf value from the DSL.
 ///
 /// Supported forms:
-/// - `"text"` => `Option<String>`
-/// - `|a, b| => "{a} {b}"` => `Option<I18NDynamicResource<(String, String)>>`
+/// - `"text"` => `Option<R>`
+/// - `"text with {placeholders}"` => `Option<R>`
 #[doc(hidden)]
 #[macro_export]
 macro_rules! i18n_leaf_expr {
     ($lit:literal) => {
-        Some($lit.to_string())
-    };
-
-    (|$($args:ident),+ $(,)?| => $lit:literal) => {
-        Some($crate::I18NDynamicResource::new(
-            |($($args),+,)| format!($lit)
-        ))
+        Some(<$crate::R>::new($lit))
     };
 }
 
@@ -21,16 +15,8 @@ macro_rules! i18n_leaf_expr {
 #[doc(hidden)]
 #[macro_export]
 macro_rules! i18n_leaf_type {
-    (@arg_ty $_arg:ident) => {
-        String
-    };
-
     ($lit:literal) => {
         Option<$crate::R>
-    };
-
-    (|$($args:ident),+ $(,)?| => $lit:literal) => {
-        Option<$crate::DR<($($crate::i18n_leaf_type!(@arg_ty $args)),+,)>>
     };
 }
 
@@ -61,23 +47,18 @@ macro_rules! i18n_build_struct {
         }
     };
 
+    (@collect [$type_name:ident] [$($fields:tt)*] $field:ident : { $($nested:tt)* } $(, $($rest:tt)*)?) => {
+        $crate::i18n_build_struct!(
+            @collect [$type_name] [$($fields)*] $field { $($nested)* } $(, $($rest)*)?
+        )
+    };
+
     (@collect [$type_name:ident] [$($fields:tt)*] $field:ident : $lit:literal $(, $($rest:tt)*)?) => {
         $crate::i18n_build_struct!(
             @collect [$type_name]
             [
                 $($fields)*
                 $field: $crate::i18n_leaf_expr!($lit),
-            ]
-            $($($rest)*)?
-        )
-    };
-
-    (@collect [$type_name:ident] [$($fields:tt)*] $field:ident : |$($args:ident),+ $(,)?| => $lit:literal $(, $($rest:tt)*)?) => {
-        $crate::i18n_build_struct!(
-            @collect [$type_name]
-            [
-                $($fields)*
-                $field: $crate::i18n_leaf_expr!(|$($args),+| => $lit),
             ]
             $($($rest)*)?
         )
@@ -119,6 +100,12 @@ macro_rules! i18n_define_types {
         }
     };
 
+    (@collect [$type_name:ident] [$($fields:tt)*] [$($nested_defs:tt)*] $field:ident : { $($nested:tt)* } $(, $($rest:tt)*)?) => {
+        $crate::i18n_define_types!(
+            @collect [$type_name] [$($fields)*] [$($nested_defs)*] $field { $($nested)* } $(, $($rest)*)?
+        );
+    };
+
     (@collect [$type_name:ident] [$($fields:tt)*] [$($nested_defs:tt)*] $field:ident : $lit:literal $(, $($rest:tt)*)?) => {
         $crate::i18n_define_types!(
             @collect [$type_name]
@@ -130,32 +117,24 @@ macro_rules! i18n_define_types {
             $($($rest)*)?
         );
     };
-
-    (@collect [$type_name:ident] [$($fields:tt)*] [$($nested_defs:tt)*] $field:ident : |$($args:ident),+ $(,)?| => $lit:literal $(, $($rest:tt)*)?) => {
-        $crate::i18n_define_types!(
-            @collect [$type_name]
-            [
-                $($fields)*
-                pub $field: $crate::i18n_leaf_type!(|$($args),+| => $lit),
-            ]
-            [$($nested_defs)*]
-            $($($rest)*)?
-        );
-    };
 }
 
 /// Applies locale overrides over a previously built fallback value.
 ///
 /// Supported override forms:
-/// - `field { ... }` for nested objects
+/// - `field: { ... }` for nested objects
 /// - `field: "text"` for static resources
-/// - `field: |a, b| => "{a} {b}"` for dynamic resources
+/// - `field: "text with {placeholders}"` for inferred dynamic resources
 #[doc(hidden)]
 #[macro_export]
 macro_rules! i18n_apply_overrides {
     ($target:expr $(,)?) => {};
 
     ($target:expr, $field:ident { $($body:tt)* } $(, $($rest:tt)*)?) => {
+        $crate::i18n_apply_overrides!($target, $field : { $($body)* } $(, $($rest)*)?);
+    };
+
+    ($target:expr, $field:ident : { $($body:tt)* } $(, $($rest:tt)*)?) => {
         $crate::i18n_apply_overrides!(&mut ($target).$field, $($body)*);
         $crate::i18n_apply_overrides!($target $(, $($rest)*)?);
     };
@@ -164,19 +143,14 @@ macro_rules! i18n_apply_overrides {
         ($target).$field = $crate::i18n_leaf_expr!($lit);
         $crate::i18n_apply_overrides!($target $(, $($rest)*)?);
     };
-
-    ($target:expr, $field:ident : |$($args:ident),+ $(,)?| => $lit:literal $(, $($rest:tt)*)?) => {
-        ($target).$field = $crate::i18n_leaf_expr!(|$($args),+| => $lit);
-        $crate::i18n_apply_overrides!($target $(, $($rest)*)?);
-    };
 }
 
 /// Defines the canonical fallback i18n schema and values from a single DSL source.
 ///
 /// DSL forms:
-/// - Nested: `field { ... }`
+/// - Nested: `field: { ... }`
 /// - Static: `field: "text"`
-/// - Dynamic: `field: |a, b, c| => "{a} {b} {c}"`
+/// - Inferred dynamic: `field: "This is {a}, {b}, {c}"`
 ///
 /// The macro requires a locale key:
 /// - `define_i18n_fallback! { I18NUsage => en ... }`
@@ -215,9 +189,9 @@ macro_rules! define_i18n_fallback {
 /// runtime fallback in `I18NAccess::acquire`.
 ///
 /// Override forms:
-/// - `field { ... }`
+/// - `field: { ... }`
 /// - `field: "text"`
-/// - `field: |a, b, c| => "{a} {b} {c}"`
+/// - `field: "This is {a}, {b}, {c}"`
 ///
 /// The macro requires a locale key:
 /// - `define_i18n! { I18NUsage => pt ... }`

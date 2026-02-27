@@ -6,9 +6,9 @@ mod fixtures {
     pub mod en {
         rusty18n::define_i18n_fallback! {
             I18NUsage => en
-            greetings {
+            greetings: {
                 waves: "Waves",
-                oi {
+                oi: {
                     a: "English nested",
                 },
             },
@@ -18,8 +18,8 @@ mod fixtures {
     pub mod pt {
         rusty18n::define_i18n! {
             super::I18NUsage => pt
-            greetings {
-                oi {
+            greetings: {
+                oi: {
                     a: "Portuguese nested",
                 },
             }

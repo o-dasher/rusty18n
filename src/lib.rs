@@ -7,10 +7,11 @@ pub use crate::core::*;
 #[cfg(feature = "bevy_reflect")]
 pub use crate::reflect::*;
 
-/// This type is used to define a simple i18n resource that does not have any dynamic variables
-/// that shall be captured by thy. R stands for Resource.
-pub type R = String;
+/// Default generated i18n resource type.
+///
+/// It stores the original template text and supports positional rendering through `.with((...))`.
+/// Plain strings and strings with `{placeholders}` both use this type.
+pub type R = I18NDynamicResource;
 
-/// This type is used to define a dynamic i18n resource that uses argument variables.
-/// DR stands for Dynamic Resource.
-pub type DR<A> = I18NDynamicResource<A>;
+/// Dynamic i18n resource type.
+pub type I18NDynamicResource = crate::core::__I18NDynamicResourceValue;

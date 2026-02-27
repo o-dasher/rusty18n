@@ -1,69 +1,174 @@
 #[cfg(feature = "bevy_reflect")]
 use bevy_reflect::Reflect;
+use derive_more::derive::{AsRef, Deref, Display as DeriveDisplay};
 use impl_trait_for_tuples::impl_for_tuples;
+use nom::branch::alt;
+use nom::bytes::complete::{is_not, tag};
+use nom::combinator::{iterator, map};
+use nom::sequence::delimited;
+use nom::IResult;
 use std::fmt::Display;
 use std::{collections::HashMap, hash::Hash};
 
-#[cfg(feature = "bevy_reflect")]
-fn default_dynamic_resource<A>() -> fn(A) -> String {
-    |_args: A| String::new()
-}
-
-/// Converts user-provided dynamic arguments into an internal tuple of `String`s.
+/// Converts user-provided dynamic arguments into positional `String`s.
 ///
 /// This enables ergonomic calls such as:
 /// `dynamic.with((1, "name", 3.5))`
-/// for resources that internally use `(String, String, String)`.
+/// for resources that internally render templates such as:
+/// `"Hello {name}, total {count}"`.
 pub trait IntoDynamicResourceArgs {
-    /// Internal dynamic argument tuple used by `I18NDynamicResource`.
-    type Output;
-
-    /// Converts `self` into the internal argument tuple expected by the dynamic resource.
-    fn into_dynamic_resource_args(self) -> Self::Output;
+    /// Converts `self` into the positional arguments expected by the dynamic resource.
+    fn into_dynamic_resource_args(self) -> Vec<String>;
 }
 
-#[impl_for_tuples(1, 16)]
+#[impl_for_tuples(0, 16)]
 #[tuple_types_no_default_trait_bound]
 impl IntoDynamicResourceArgs for Tuple {
     for_tuples!( where #( Tuple: Display )* );
-    for_tuples!( type Output = ( #( String ),* ); );
-    fn into_dynamic_resource_args(self) -> Self::Output {
-        for_tuples!( ( #( self.Tuple.to_string() ),* ) )
+
+    fn into_dynamic_resource_args(self) -> Vec<String> {
+        [for_tuples!( #( self.Tuple.to_string() ),* )]
+            .into_iter()
+            .collect()
     }
 }
 
-/// A struct representing an internationalization (i18n) dynamic resource.
-#[derive(Debug)]
-#[cfg_attr(feature = "bevy_reflect", derive(Reflect))]
-pub struct I18NDynamicResource<A> {
-    #[cfg_attr(
-        feature = "bevy_reflect",
-        reflect(ignore, default = "default_dynamic_resource")
-    )]
-    /// A function that takes arguments of type `A` and returns a string representing
-    /// the localized resource.
-    caller: fn(A) -> String,
+#[derive(Clone, Copy)]
+enum TemplatePart<'a> {
+    Text(&'a str),
+    Escaped(char),
+    Placeholder(&'a str),
 }
 
-impl<A> I18NDynamicResource<A> {
-    /// Creates a new dynamic resource with the provided renderer function.
-    pub fn new(caller: fn(A) -> String) -> Self {
-        Self { caller }
+fn template_part<'a>(input: &'a str) -> IResult<&'a str, TemplatePart<'a>> {
+    alt((
+        map(tag("{{"), |_| TemplatePart::Escaped('{')),
+        map(tag("}}"), |_| TemplatePart::Escaped('}')),
+        map(
+            delimited(tag("{"), is_not("{}"), tag("}")),
+            TemplatePart::Placeholder,
+        ),
+        map(is_not("{}"), TemplatePart::Text),
+    ))(input)
+}
+
+fn for_each_template_part<'a>(template: &'a str, mut visit: impl FnMut(TemplatePart<'a>)) {
+    let mut parts = iterator(template, template_part);
+
+    for part in &mut parts {
+        visit(part);
+    }
+
+    let (rest, ()) = parts
+        .finish()
+        .unwrap_or_else(|_| panic!("invalid template `{template}`"));
+
+    assert!(rest.is_empty(), "invalid template `{template}`");
+}
+
+fn normalize_template(template: &str) -> String {
+    let mut rendered = String::new();
+    for_each_template_part(template, |part| match part {
+        TemplatePart::Text(text) => rendered.push_str(text),
+        TemplatePart::Escaped(ch) => rendered.push(ch),
+        TemplatePart::Placeholder(name) => {
+            rendered.push('{');
+            rendered.push_str(name);
+            rendered.push('}');
+        }
+    });
+
+    rendered
+}
+
+fn render_template(template: &str, args: &[String], display_text: &str) -> String {
+    let mut rendered = String::with_capacity(display_text.len());
+    let mut placeholders = Vec::<&str>::new();
+    for_each_template_part(template, |part| match part {
+        TemplatePart::Text(text) => rendered.push_str(text),
+        TemplatePart::Escaped(ch) => rendered.push(ch),
+        TemplatePart::Placeholder(name) => {
+            let index =
+                if let Some(index) = placeholders.iter().position(|candidate| *candidate == name) {
+                    index
+                } else {
+                    placeholders.push(name);
+                    placeholders.len() - 1
+                };
+
+            let value = args.get(index).unwrap_or_else(|| {
+                panic!(
+                    "expected {} argument(s) for `{display_text}`, got {}",
+                    placeholders.len(),
+                    args.len()
+                )
+            });
+
+            rendered.push_str(value);
+        }
+    });
+
+    assert!(
+        args.len() == placeholders.len(),
+        "expected {} argument(s) for `{display_text}`, got {}",
+        placeholders.len(),
+        args.len()
+    );
+
+    rendered
+}
+
+/// A struct representing an internationalization (i18n) dynamic resource.
+#[derive(Debug, PartialEq, Eq, AsRef, Deref, DeriveDisplay)]
+#[cfg_attr(feature = "bevy_reflect", derive(Reflect))]
+#[display("{}", display_text)]
+#[doc(hidden)]
+pub struct __I18NDynamicResourceValue {
+    #[cfg_attr(feature = "bevy_reflect", reflect(ignore))]
+    template: String,
+    /// Template text with escaped braces resolved.
+    #[as_ref(forward)]
+    #[deref(forward)]
+    display_text: String,
+}
+
+impl __I18NDynamicResourceValue {
+    /// Creates a new resource by parsing a template with `{placeholder}` markers.
+    ///
+    /// Positional arguments passed to `.with((...))` are matched by first appearance.
+    /// Use `{{` and `}}` to render literal braces.
+    pub fn new(template: &str) -> Self {
+        let display_text = normalize_template(template);
+
+        Self {
+            template: template.to_string(),
+            display_text,
+        }
     }
 
     /// Invokes the dynamic resource with user-provided arguments.
     ///
     /// # Arguments
-    /// * `args` - Arguments that can be converted into the internal tuple type `A`.
+    /// * `args` - Arguments that can be converted into positional strings.
     ///   Each tuple item must implement `Display`.
     ///
     /// # Returns
     /// A string representing the localized resource.
     pub fn with<T>(&self, args: T) -> String
     where
-        T: IntoDynamicResourceArgs<Output = A>,
+        T: IntoDynamicResourceArgs,
     {
-        (self.caller)(args.into_dynamic_resource_args())
+        render_template(
+            &self.template,
+            &args.into_dynamic_resource_args(),
+            &self.display_text,
+        )
+    }
+}
+
+impl PartialEq<str> for __I18NDynamicResourceValue {
+    fn eq(&self, other: &str) -> bool {
+        self.display_text == other
     }
 }
 
