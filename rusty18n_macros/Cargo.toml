@@ -2,6 +2,9 @@
 name = "rusty18n_macros"
 version = "0.1.0"
 edition = "2021"
+repository = "https://github.com/o-dasher/rusty18n.git"
+description = "Internal proc macros for rusty18n."
+license = "MIT"
 
 [lints]
 workspace = true
