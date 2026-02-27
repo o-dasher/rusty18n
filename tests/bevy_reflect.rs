@@ -22,8 +22,8 @@ struct FixtureI18n {
 }
 
 impl I18NFallback for FixtureI18n {
-    fn fallback() -> Self {
-        Self {
+    fn fallback() -> rusty18n::Result<Self> {
+        Ok(Self {
             greetings: Greetings {
                 waves: Some("Waves".to_string()),
                 nested: Some("Fallback nested".to_string()),
@@ -32,7 +32,7 @@ impl I18NFallback for FixtureI18n {
                 literal: Some("Fallback literal".to_string()),
                 translated: Some("Fallback translated".to_string()),
             },
-        }
+        })
     }
 }
 
@@ -75,8 +75,11 @@ fn reflects_sparse_locale_values_by_path() {
 
 #[test]
 fn reflects_access_values_with_fallback() {
-    let locales = I18NWrapper::<Locale, FixtureI18n>::new(vec![(Locale::Pt, pt)]);
-    let pt = locales.get(Locale::Pt);
+    let locales = I18NWrapper::<Locale, FixtureI18n>::new(vec![(Locale::Pt, pt())])
+        .expect("locale construction should succeed");
+    let pt = locales
+        .get(Locale::Pt)
+        .expect("locale access should succeed");
 
     assert_eq!(
         pt.by_path::<String>("greetings.waves").map(String::as_str),

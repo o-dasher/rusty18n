@@ -27,31 +27,38 @@ mod fixtures {
 
 #[test]
 fn infers_placeholders_and_handles_escaped_braces() {
-    let locales = I18NUsage::locales();
-    let en = locales.get(I18NUsage::Key::en);
+    let locales = I18NUsage::locales().expect("locale construction should succeed");
+    let en = locales
+        .get(I18NUsage::Key::en)
+        .expect("en locale should exist");
 
     assert_eq!(
-        rusty18n::t!(en.messages.inferred).with((1, 2, 3)),
-        "This is 1, 2, 3"
+        rusty18n::t!(en.messages.inferred).and_then(|value| value.with((1, 2, 3))),
+        Ok("This is 1, 2, 3".to_string())
     );
     assert_eq!(
-        rusty18n::t!(en.messages.repeated).with(("echo",)),
-        "echo + echo"
+        rusty18n::t!(en.messages.repeated).and_then(|value| value.with(("echo",))),
+        Ok("echo + echo".to_string())
     );
     assert_eq!(
-        rusty18n::t!(en.messages.escaped).with(("value",)),
-        "Curly {brace} and value"
+        rusty18n::t!(en.messages.escaped).and_then(|value| value.with(("value",))),
+        Ok("Curly {brace} and value".to_string())
     );
-    assert_eq!(rusty18n::t!(en.messages.literal), "Just {braces}");
+    assert_eq!(
+        rusty18n::t!(en.messages.literal).map(std::convert::AsRef::as_ref),
+        Ok("Just {braces}")
+    );
 }
 
 #[test]
 fn infers_placeholder_order_from_first_appearance() {
-    let locales = I18NUsage::locales();
+    let locales = I18NUsage::locales().expect("locale construction should succeed");
 
-    let pt = locales.get(I18NUsage::Key::pt);
+    let pt = locales
+        .get(I18NUsage::Key::pt)
+        .expect("pt locale access should be available");
     assert_eq!(
-        rusty18n::t!(pt.messages.inferred).with(("C", "A", "B")),
-        "C depois A depois B"
+        rusty18n::t!(pt.messages.inferred).and_then(|value| value.with(("C", "A", "B"))),
+        Ok("C depois A depois B".to_string())
     );
 }

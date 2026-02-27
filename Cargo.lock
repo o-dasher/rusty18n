@@ -350,6 +350,7 @@ dependencies = [
  "impl-trait-for-tuples",
  "nom",
  "paste",
+ "thiserror",
 ]
 
 [[package]]
