@@ -17,7 +17,7 @@ cargo add rusty18n
 
 1. Define the fallback schema with `define_i18n_fallback!`.
 2. Define each locale override with `define_i18n!`.
-3. Generate `I18NKey` + `i18n_locales()` with `define_i18n_locales!`.
+3. Generate `I18NUsage::Key` + `I18NUsage::locales()` with `define_i18n_locales!`.
 4. Read values with `I18NWrapper::get` and `t_prefix!`/`t!`.
 
 ## DSL
@@ -79,7 +79,6 @@ define_i18n! {
 ```rust
 pub mod en;
 pub mod pt;
-pub use en::I18NUsage;
 
 rusty18n::define_i18n_locales! {
     I18NUsage =>
@@ -95,8 +94,8 @@ use rusty18n::t_prefix;
 mod i18n;
 
 fn main() {
-    let locales = i18n::i18n_locales();
-    let i18n = locales.get(i18n::I18NKey::Pt);
+    let locales = i18n::I18NUsage::locales();
+    let i18n = locales.get(i18n::I18NUsage::Key::pt);
 
     let a = 3;
     let b = 2;
@@ -121,6 +120,6 @@ In this example:
 
 - `define_i18n_fallback!`: defines fallback type + values and generates a locale constructor.
 - `define_i18n!`: defines sparse locale overrides and generates a locale constructor.
-- `define_i18n_locales!`: generates `I18NKey` and `i18n_locales()` from locale modules.
+- `define_i18n_locales!`: generates the `I18NUsage` namespace module with `Value`, `Key`, and `locales()`.
 - `t_prefix!`: creates a scoped accessor macro for an `I18NAccess` value.
 - `t!`: direct accessor macro for one-off lookups.

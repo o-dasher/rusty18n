@@ -1,10 +1,11 @@
+use crate::i18n::I18NUsage;
 use rusty18n::t_prefix;
 
 mod i18n;
 
 fn main() {
-    let locales = i18n::i18n_locales();
-    let i18n = locales.get(i18n::I18NKey::Pt);
+    let locales = I18NUsage::locales();
+    let i18n = locales.get(I18NUsage::Key::pt);
 
     let a = 3;
     let b = 2;

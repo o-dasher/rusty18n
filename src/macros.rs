@@ -182,8 +182,8 @@ macro_rules! i18n_apply_overrides {
 /// - `define_i18n_fallback! { I18NUsage => en ... }`
 ///
 /// Generated items in the current module:
-/// - `pub use <root_type_snake>::<RootType>;`
-/// - `pub fn <locale_key_lower>() -> <RootType>`
+/// - `pub mod <root_type_snake> { pub struct <RootType> { ... } }`
+/// - `pub fn <locale_key_lower>() -> <root_type_snake>::<RootType>`
 #[macro_export]
 macro_rules! define_i18n_fallback {
     (
@@ -202,10 +202,8 @@ macro_rules! define_i18n_fallback {
                 }
             }
 
-            pub use [<$root_type:snake>]::$root_type;
-
-            pub fn [<$locale_key:lower>]() -> $root_type {
-                <$root_type as $crate::I18NFallback>::fallback()
+            pub fn [<$locale_key:lower>]() -> [<$root_type:snake>]::$root_type {
+                <[<$root_type:snake>]::$root_type as $crate::I18NFallback>::fallback()
             }
         }
     };
@@ -225,7 +223,7 @@ macro_rules! define_i18n_fallback {
 /// - `define_i18n! { I18NUsage => pt ... }`
 ///
 /// It generates:
-/// - `pub fn <locale_key_lower>() -> I18NUsage`
+/// - `pub fn <locale_key_lower>() -> I18NUsage::Value`
 #[macro_export]
 macro_rules! define_i18n {
     (
@@ -234,8 +232,8 @@ macro_rules! define_i18n {
         $($body:tt)*
     ) => {
         ::paste::paste! {
-            pub fn [<$locale_key:lower>]() -> $base_i18n {
-                let mut locale_i18n = <$base_i18n as ::core::default::Default>::default();
+            pub fn [<$locale_key:lower>]() -> $base_i18n::Value {
+                let mut locale_i18n = <$base_i18n::Value as ::core::default::Default>::default();
                 $crate::i18n_apply_overrides!(&mut locale_i18n, $($body)*);
                 locale_i18n
             }
@@ -255,30 +253,42 @@ macro_rules! define_i18n {
 ///
 /// Example:
 /// `define_i18n_locales! { I18NUsage => en|pt }`
+///
+/// It generates a namespace module:
+/// - `pub mod I18NUsage { ... }`
+/// - `pub type I18NUsage::Value = <default_locale_type>`
+/// - `pub enum I18NUsage::Key { en, pt, ... }`
+/// - `pub fn I18NUsage::locales() -> I18NWrapper<I18NUsage::Key, I18NUsage::Value>`
 #[macro_export]
 macro_rules! define_i18n_locales {
     (
-        $i18n_usage:path =>
+        $i18n_usage:ident =>
         $default_locale_mod:ident
         $(| $locale_mod:ident )* $(|)?
     ) => {
         ::paste::paste! {
-            #[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq)]
-            pub enum I18NKey {
-                #[default]
-                [<$default_locale_mod:camel>],
-                $(
-                    [<$locale_mod:camel>],
-                )*
-            }
+            #[allow(non_snake_case)]
+            pub mod $i18n_usage {
+                pub type Value = super::$default_locale_mod::[<$i18n_usage:snake>]::$i18n_usage;
 
-            pub fn i18n_locales() -> $crate::I18NWrapper<I18NKey, $i18n_usage> {
-                $crate::I18NWrapper::new(vec![
-                    (I18NKey::[<$default_locale_mod:camel>], $default_locale_mod::[<$default_locale_mod:snake>]),
+                #[allow(non_camel_case_types)]
+                #[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq)]
+                pub enum Key {
+                    #[default]
+                    $default_locale_mod,
                     $(
-                        (I18NKey::[<$locale_mod:camel>], $locale_mod::[<$locale_mod:snake>]),
+                        $locale_mod,
                     )*
-                ])
+                }
+
+                pub fn locales() -> $crate::I18NWrapper<Key, Value> {
+                    $crate::I18NWrapper::new(vec![
+                        (Key::$default_locale_mod, super::$default_locale_mod::[<$default_locale_mod:snake>]),
+                        $(
+                            (Key::$locale_mod, super::$locale_mod::[<$locale_mod:snake>]),
+                        )*
+                    ])
+                }
             }
         }
     };
