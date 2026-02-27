@@ -22,7 +22,6 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub type I18NLocaleLoader<V> = fn() -> V;
 
 type I18NRenderFn<M> = fn(&[String], Option<fn() -> M>) -> String;
-type I18NRender<M> = Option<I18NRenderFn<M>>;
 
 /// Converts user-provided dynamic arguments into positional `String`s.
 ///
@@ -31,6 +30,8 @@ type I18NRender<M> = Option<I18NRenderFn<M>>;
 /// for resources that internally render templates such as:
 /// `"Hello {name}, total {count}"`.
 pub trait IntoDynamicResourceArgs {
+    type Marker;
+
     /// Converts `self` into the positional arguments expected by the dynamic resource.
     fn into_dynamic_resource_args(self) -> Vec<String>;
 }
@@ -39,6 +40,7 @@ pub trait IntoDynamicResourceArgs {
 #[tuple_types_no_default_trait_bound]
 impl IntoDynamicResourceArgs for Tuple {
     for_tuples!( where #( Tuple: Display )* );
+    for_tuples!( type Marker = ( #( () ),* ); );
 
     fn into_dynamic_resource_args(self) -> Vec<String> {
         let mut args = Vec::new();
@@ -47,19 +49,8 @@ impl IntoDynamicResourceArgs for Tuple {
     }
 }
 
-#[doc(hidden)]
-pub trait I18NDynamicArgs {
-    type Marker;
-}
-
-#[impl_for_tuples(0, 16)]
-#[tuple_types_no_default_trait_bound]
-impl I18NDynamicArgs for Tuple {
-    for_tuples!( type Marker = ( #( () ),* ); );
-}
-
 /// A struct representing an internationalization (i18n) dynamic resource.
-#[derive(Debug, AsRef, Deref, DeriveDisplay)]
+#[derive(Debug, Default, AsRef, Deref, DeriveDisplay)]
 #[cfg_attr(feature = "bevy_reflect", derive(Reflect))]
 #[display("{}", display_text)]
 #[doc(hidden)]
@@ -72,7 +63,7 @@ pub struct I18NDynamicResourceValue<M = ()> {
     #[deref(forward)]
     display_text: &'static str,
     #[cfg_attr(feature = "bevy_reflect", reflect(ignore))]
-    render: I18NRender<M>,
+    render: Option<I18NRenderFn<M>>,
 }
 
 impl<M> I18NDynamicResourceValue<M> {
@@ -102,7 +93,7 @@ impl<M> I18NDynamicResourceValue<M> {
     #[must_use]
     pub fn with<T>(&self, args: T) -> String
     where
-        T: IntoDynamicResourceArgs + I18NDynamicArgs<Marker = M>,
+        T: IntoDynamicResourceArgs<Marker = M>,
     {
         let args = args.into_dynamic_resource_args();
 
