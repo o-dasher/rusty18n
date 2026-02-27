@@ -23,7 +23,7 @@ pub fn i18n_ptbr() -> I18NUsage {
     define_i18n! {
         I18NUsage,
         greetings: {
-            waves: r!("Oi!"),
+            waves: "Oi!",
         }
     }
 }

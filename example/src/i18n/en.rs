@@ -1,13 +1,12 @@
-use rusty18n::r;
-use rusty18n::{define_i18n_fallback, I18NDynamicResource};
+use rusty18n::define_i18n_fallback;
 
 define_i18n_fallback! {
-    i_18_n_usage,
+    I18NUsage =>
     greetings {
-        waves: r!("Waves"),
-        cool: r!("Hey that is cool"),
+        waves: "Waves",
+        cool: "Hey that is cool",
     },
     calculus {
-        answers: r!(|(a, b, c)| "{a}+{b}={c} yeah!"),
+        answers: |a, b, c| => "{a}+{b}={c} yeah!",
     },
 }
