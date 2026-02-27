@@ -1,25 +1,62 @@
 # Rusty18n
-A pretty simple yet robust library to deal with i18n on Rust.
 
-# Why Rusty18n?
-Wouldn't it be pretty useful and handy if you could write all your translations directly in your
-source code? This is what this crate is solving. I was in need of a simple and easy to use i18n
-solution for my discord bot, and I had the idea to create a simple in-memory i18n handler. It
-provides all the basis for what you would expect for an in-memory i18n in Rust, covering simple
-static translations to dynamic ones.
+Rusty18n is a small in-memory i18n library for Rust with:
 
-# So how do i start?
-You just need to do add some dependencies to your project:
-```
+- A single DSL source of truth for the fallback schema
+- Sparse locale overrides
+- Runtime fallback for missing translations
+- Static and dynamic resources
+
+## Install
+
+```bash
 cargo add rusty18n
 ```
 
-`define_i18n` lets you write partial i18n implementations for languages that are
-still being working on, like in the example:
-```rs
+## How It Works
+
+1. Define your canonical i18n schema + fallback values with `define_i18n_fallback!`.
+2. Define each locale with `define_i18n!` by overriding only what is translated.
+3. Read translations through `I18NWrapper` + `I18NAccess`.
+4. If a locale field is `None`, lookup automatically falls back to the fallback locale.
+
+## DSL
+
+`define_i18n_fallback!` and `define_i18n!` support:
+
+- Nested field: `field { ... }`
+- Static resource: `field: "Text"`
+- Dynamic resource: `field: |a, b, c| => "{a} {b} {c}"`
+
+Dynamic resource arguments passed to `.with((...))` can be any tuple items implementing `Display`.
+They are converted to `String` internally.
+
+## Example
+
+### Fallback schema (`example/src/i18n/en.rs`)
+
+```rust
+use rusty18n::define_i18n_fallback;
+
+define_i18n_fallback! {
+    I18NUsage =>
+    greetings {
+        waves: "Waves",
+        cool: "Hey that is cool",
+    },
+    calculus {
+        answers: |a, b, c| => "{a}+{b}={c} yeah!",
+    },
+}
+```
+
+### Partial locale override (`example/src/i18n/ptbr.rs`)
+
+```rust
+use crate::i18n::I18NUsage;
+use rusty18n::define_i18n;
+
 pub fn i18n_ptbr() -> I18NUsage {
-    // Using the define_i18n macro we don't need to change all the i18n implementations once
-    // something in the base fallback implementation structure changes.
     define_i18n! {
         I18NUsage,
         greetings: {
@@ -28,4 +65,48 @@ pub fn i18n_ptbr() -> I18NUsage {
     }
 }
 ```
-You can see an example usage [here](https://github.com/o-dasher/rusty18n/tree/master/example)
+
+### Use in app (`example/src/main.rs`)
+
+```rust
+use rusty18n::{t_prefix, I18NWrapper};
+use crate::i18n::ptbr::i18n_ptbr;
+
+mod i18n;
+
+#[derive(Default, Clone, Copy, Hash, Eq, PartialEq)]
+pub enum I18NKey {
+    #[default]
+    US,
+    PTBR,
+}
+
+fn main() {
+    let locales = I18NWrapper::new(vec![(I18NKey::PTBR, i18n_ptbr)]);
+    let i18n = locales.get(I18NKey::PTBR);
+
+    let a = 3;
+    let b = 2;
+    let result = a + b;
+
+    t_prefix!($wah, i18n);
+
+    let response_static = wah!(greetings.waves);
+    let response_dynamic = wah!(calculus.answers).with((a, b, result));
+
+    println!("{}", response_static);
+    println!("{}", response_dynamic);
+}
+```
+
+In this example:
+
+- `greetings.waves` is overridden in `PTBR` (`"Oi!"`)
+- `calculus.answers` is missing in `PTBR`, so it falls back to the fallback locale
+
+## Macros
+
+- `define_i18n_fallback!`: generate the root i18n type and fallback implementation from the DSL.
+- `define_i18n!`: create sparse locale values by overriding only selected fields.
+- `t_prefix!`: create a scoped accessor macro for an `I18NAccess` value.
+- `t!`: direct accessor macro when you do not want a custom prefix macro.
