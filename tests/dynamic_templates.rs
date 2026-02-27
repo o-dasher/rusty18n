@@ -27,7 +27,7 @@ mod fixtures {
 
 #[test]
 fn infers_placeholders_and_handles_escaped_braces() {
-    let locales = I18NUsage::locales().expect("locale construction should succeed");
+    let locales = I18NUsage::locales();
     let en = locales
         .get(I18NUsage::Key::en)
         .expect("en locale should exist");
@@ -52,7 +52,7 @@ fn infers_placeholders_and_handles_escaped_braces() {
 
 #[test]
 fn infers_placeholder_order_from_first_appearance() {
-    let locales = I18NUsage::locales().expect("locale construction should succeed");
+    let locales = I18NUsage::locales();
 
     let pt = locales
         .get(I18NUsage::Key::pt)

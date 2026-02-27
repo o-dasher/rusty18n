@@ -4,7 +4,7 @@ use rusty18n::t_prefix;
 mod i18n;
 
 fn main() -> rusty18n::Result<()> {
-    let locales = I18NUsage::locales()?;
+    let locales = I18NUsage::locales();
     let i18n = locales.get(I18NUsage::Key::pt)?;
 
     let a = 3;

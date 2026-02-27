@@ -35,7 +35,7 @@ mod fixtures {
 
 #[test]
 fn reflects_sparse_locale_values_by_path() {
-    let pt = fixtures::pt::pt().expect("locale construction should succeed");
+    let pt = fixtures::pt::pt();
 
     assert_eq!(
         pt.by_path::<R>("greetings.nested")
@@ -53,7 +53,7 @@ fn reflects_sparse_locale_values_by_path() {
 
 #[test]
 fn reflects_access_values_with_fallback() {
-    let locales = I18NUsage::locales().expect("locale construction should succeed");
+    let locales = I18NUsage::locales();
     let pt = locales
         .get(I18NUsage::Key::pt)
         .expect("locale access should succeed");

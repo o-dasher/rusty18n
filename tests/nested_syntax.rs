@@ -29,7 +29,7 @@ mod fixtures {
 
 #[test]
 fn supports_nested_blocks() {
-    let locales = I18NUsage::locales().expect("locale construction should succeed");
+    let locales = I18NUsage::locales();
 
     let en = locales
         .get(I18NUsage::Key::en)

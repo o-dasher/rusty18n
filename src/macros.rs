@@ -30,9 +30,12 @@ macro_rules! i18n_define_struct {
 #[doc(hidden)]
 #[macro_export]
 macro_rules! i18n_leaf_expr {
-    ($lit:literal) => {
-        Some(<$crate::R>::new($lit)?)
-    };
+    ($lit:literal) => {{
+        const _: () = {
+            $crate::__assert_valid_template($lit);
+        };
+        Some($crate::__private::new_static_resource($lit))
+    }};
 }
 
 /// Builds a generated field type from the DSL leaf form.
@@ -180,7 +183,7 @@ macro_rules! i18n_apply_overrides {
 ///
 /// Generated items in the current module:
 /// - `pub mod <root_type_snake> { pub struct <RootType> { ... } }`
-/// - `pub fn <locale_key_lower>() -> Result<<root_type_snake>::<RootType>>`
+/// - `pub fn <locale_key_lower>() -> <root_type_snake>::<RootType>`
 #[macro_export]
 macro_rules! define_i18n_fallback {
     (
@@ -193,13 +196,13 @@ macro_rules! define_i18n_fallback {
                 $crate::i18n_define_types!($root_type { $($body)* });
 
                 impl $crate::I18NFallback for $root_type {
-                    fn fallback() -> $crate::Result<Self> {
-                        Ok($crate::i18n_build_struct!($root_type { $($body)* }))
+                    fn fallback() -> Self {
+                        $crate::i18n_build_struct!($root_type { $($body)* })
                     }
                 }
             }
 
-            pub fn [<$locale_key:lower>]() -> $crate::Result<[<$root_type:snake>]::$root_type> {
+            pub fn [<$locale_key:lower>]() -> [<$root_type:snake>]::$root_type {
                 <[<$root_type:snake>]::$root_type as $crate::I18NFallback>::fallback()
             }
         }
@@ -220,7 +223,7 @@ macro_rules! define_i18n_fallback {
 /// - `define_i18n! { I18NUsage => pt ... }`
 ///
 /// It generates:
-/// - `pub fn <locale_key_lower>() -> Result<I18NUsage::Value>`
+/// - `pub fn <locale_key_lower>() -> I18NUsage::Value`
 #[macro_export]
 macro_rules! define_i18n {
     (
@@ -229,10 +232,10 @@ macro_rules! define_i18n {
         $($body:tt)*
     ) => {
         ::paste::paste! {
-            pub fn [<$locale_key:lower>]() -> $crate::Result<$base_i18n::Value> {
+            pub fn [<$locale_key:lower>]() -> $base_i18n::Value {
                 let mut locale_i18n = <$base_i18n::Value as ::core::default::Default>::default();
                 $crate::i18n_apply_overrides!(&mut locale_i18n, $($body)*);
-                Ok(locale_i18n)
+                locale_i18n
             }
         }
     };
@@ -255,8 +258,8 @@ macro_rules! define_i18n {
 /// - `pub mod I18NUsage { ... }`
 /// - `pub type I18NUsage::Value = <default_locale_type>`
 /// - `pub enum I18NUsage::Key { en, pt, ... }`
-/// - `pub fn I18NUsage::locales() -> Result<I18NWrapper<I18NUsage::Key, I18NUsage::Value>>`
-/// - `pub fn I18NUsage::locales_dynamic() -> Result<I18NDynamicWrapper<I18NUsage::Key, I18NUsage::Value>>`
+/// - `pub fn I18NUsage::locales() -> I18NWrapper<I18NUsage::Key, I18NUsage::Value>`
+/// - `pub fn I18NUsage::locales_dynamic() -> I18NDynamicWrapper<I18NUsage::Key, I18NUsage::Value>`
 #[macro_export]
 macro_rules! define_i18n_locales {
     (
@@ -279,16 +282,16 @@ macro_rules! define_i18n_locales {
                     )*
                 }
 
-                pub fn locales() -> $crate::Result<$crate::I18NWrapper<Key, Value>> {
+                pub fn locales() -> $crate::I18NWrapper<Key, Value> {
                     $crate::I18NWrapper::new(vec![
-                        (Key::$default_locale_mod, super::$default_locale_mod::[<$default_locale_mod:snake>]()?),
+                        (Key::$default_locale_mod, super::$default_locale_mod::[<$default_locale_mod:snake>]() ),
                         $(
-                            (Key::$locale_mod, super::$locale_mod::[<$locale_mod:snake>]()?),
+                            (Key::$locale_mod, super::$locale_mod::[<$locale_mod:snake>]()),
                         )*
                     ])
                 }
 
-                pub fn locales_dynamic() -> $crate::Result<$crate::I18NDynamicWrapper<Key, Value>> {
+                pub fn locales_dynamic() -> $crate::I18NDynamicWrapper<Key, Value> {
                     $crate::I18NDynamicWrapper::new(vec![
                         (Key::$default_locale_mod, super::$default_locale_mod::[<$default_locale_mod:snake>]),
                         $(

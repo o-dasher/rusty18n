@@ -1,4 +1,4 @@
-use rusty18n::Error;
+use rusty18n::{Error, R};
 
 use crate::fixtures::ErrorUsage;
 
@@ -19,26 +19,16 @@ mod fixtures {
     }
 }
 
-mod invalid_fixture {
-    rusty18n::define_i18n_fallback! {
-        InvalidUsage => en
-        broken: "Hello {",
-    }
-}
-
 #[test]
 fn returns_errors_for_invalid_templates_and_argument_mismatches() {
     assert_eq!(
-        invalid_fixture::en().map(|_| ()),
+        R::new("Hello {"),
         Err(Error::InvalidTemplate {
             template: "Hello {".to_string(),
         })
     );
 
-    let resource = fixtures::en::en()
-        .expect("locale construction should succeed")
-        .value
-        .expect("resource should exist");
+    let resource = fixtures::en::en().value.expect("resource should exist");
     assert_eq!(
         resource.with(()),
         Err(Error::InvalidArgumentCount {
@@ -51,7 +41,7 @@ fn returns_errors_for_invalid_templates_and_argument_mismatches() {
 
 #[test]
 fn returns_an_error_when_target_and_fallback_are_missing_the_resource() {
-    let locales = ErrorUsage::locales().expect("locale construction should succeed");
+    let locales = ErrorUsage::locales();
     let access = locales
         .get(ErrorUsage::Key::pt)
         .expect("locale access should succeed");

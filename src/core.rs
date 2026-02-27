@@ -36,7 +36,7 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// A locale constructor used by the dynamic wrapper.
-pub type I18NLocaleLoader<V> = fn() -> Result<V>;
+pub type I18NLocaleLoader<V> = fn() -> V;
 
 /// Converts user-provided dynamic arguments into positional `String`s.
 ///
@@ -59,6 +59,33 @@ impl IntoDynamicResourceArgs for Tuple {
         for_tuples!( #( args.extend(std::iter::once(self.Tuple.to_string())); )* );
         args
     }
+}
+
+fn parse_template(template: &str) -> Result<(String, Vec<String>)> {
+    let mut rendered = String::new();
+    let mut placeholders = Vec::new();
+
+    for_each_template_part(template, |part| {
+        match part {
+            TemplatePart::Text(text) => rendered.push_str(text),
+            TemplatePart::Escaped(ch) => rendered.push(ch),
+            TemplatePart::Placeholder(name) => {
+                rendered.push('{');
+                rendered.push_str(name);
+                rendered.push('}');
+
+                if !placeholders
+                    .iter()
+                    .any(|candidate: &String| candidate == name)
+                {
+                    placeholders.push(name.to_string());
+                }
+            }
+        }
+        Ok(())
+    })?;
+
+    Ok((rendered, placeholders))
 }
 
 #[derive(Clone, Copy)]
@@ -103,31 +130,107 @@ fn for_each_template_part<'a>(
     }
 }
 
-fn parse_template(template: &str) -> Result<(String, Vec<String>)> {
-    let mut rendered = String::new();
+fn build_static_template(template: &'static str) -> (String, Vec<String>) {
+    let bytes = template.as_bytes();
+    let mut display_text = String::with_capacity(template.len());
     let mut placeholders = Vec::new();
+    let mut index = 0;
+    let mut text_start = 0;
 
-    for_each_template_part(template, |part| {
-        match part {
-            TemplatePart::Text(text) => rendered.push_str(text),
-            TemplatePart::Escaped(ch) => rendered.push(ch),
-            TemplatePart::Placeholder(name) => {
-                rendered.push('{');
-                rendered.push_str(name);
-                rendered.push('}');
+    while index < bytes.len() {
+        match bytes[index] {
+            b'{' if index + 1 < bytes.len() && bytes[index + 1] == b'{' => {
+                display_text.push_str(&template[text_start..index]);
+                display_text.push('{');
+                index += 2;
+                text_start = index;
+            }
+            b'}' if index + 1 < bytes.len() && bytes[index + 1] == b'}' => {
+                display_text.push_str(&template[text_start..index]);
+                display_text.push('}');
+                index += 2;
+                text_start = index;
+            }
+            b'{' => {
+                let mut placeholder_end = index + 1;
+                let mut is_placeholder = placeholder_end < bytes.len();
 
-                if !placeholders
-                    .iter()
-                    .any(|candidate: &String| candidate == name)
-                {
-                    placeholders.push(name.to_string());
+                while placeholder_end < bytes.len() && bytes[placeholder_end] != b'}' {
+                    if bytes[placeholder_end] == b'{' {
+                        is_placeholder = false;
+                        break;
+                    }
+                    placeholder_end += 1;
+                }
+
+                if is_placeholder && placeholder_end < bytes.len() && placeholder_end > index + 1 {
+                    display_text.push_str(&template[text_start..index]);
+
+                    let name = &template[index + 1..placeholder_end];
+                    display_text.push('{');
+                    display_text.push_str(name);
+                    display_text.push('}');
+
+                    if !placeholders
+                        .iter()
+                        .any(|candidate: &String| candidate == name)
+                    {
+                        placeholders.push(name.to_string());
+                    }
+
+                    index = placeholder_end + 1;
+                    text_start = index;
+                } else {
+                    index += 1;
                 }
             }
+            _ => index += 1,
         }
-        Ok(())
-    })?;
+    }
 
-    Ok((rendered, placeholders))
+    display_text.push_str(&template[text_start..]);
+
+    (display_text, placeholders)
+}
+
+#[doc(hidden)]
+pub const fn __assert_valid_template(template: &str) {
+    let bytes = template.as_bytes();
+    let mut index = 0;
+
+    while index < bytes.len() {
+        match bytes[index] {
+            b'{' => {
+                if index + 1 < bytes.len() && bytes[index + 1] == b'{' {
+                    index += 2;
+                    continue;
+                }
+
+                index += 1;
+                let start = index;
+
+                while index < bytes.len() && bytes[index] != b'}' {
+                    assert!(bytes[index] != b'{', "invalid template literal");
+                    index += 1;
+                }
+
+                assert!(
+                    !(index == start || index >= bytes.len()),
+                    "invalid template literal"
+                );
+
+                index += 1;
+            }
+            b'}' => {
+                assert!(
+                    index + 1 < bytes.len() && bytes[index + 1] == b'}',
+                    "invalid template literal"
+                );
+                index += 2;
+            }
+            _ => index += 1,
+        }
+    }
 }
 
 fn render_template(template: &str, args: &[String], placeholders: &[String]) -> Result<String> {
@@ -185,6 +288,17 @@ pub struct __I18NDynamicResourceValue {
 }
 
 impl __I18NDynamicResourceValue {
+    #[must_use]
+    fn new_static(template: &'static str) -> Self {
+        let (display_text, placeholders) = build_static_template(template);
+
+        Self {
+            template: template.to_string(),
+            placeholders,
+            display_text,
+        }
+    }
+
     /// Creates a new resource by parsing a template with `{placeholder}` markers.
     ///
     /// Positional arguments passed to `.with((...))` are matched by first appearance.
@@ -227,6 +341,16 @@ impl __I18NDynamicResourceValue {
     }
 }
 
+#[doc(hidden)]
+pub mod __private {
+    use super::__I18NDynamicResourceValue;
+
+    #[must_use]
+    pub fn new_static_resource(template: &'static str) -> __I18NDynamicResourceValue {
+        __I18NDynamicResourceValue::new_static(template)
+    }
+}
+
 impl PartialEq<str> for __I18NDynamicResourceValue {
     fn eq(&self, other: &str) -> bool {
         self.display_text == other
@@ -240,10 +364,7 @@ impl PartialEq<str> for __I18NDynamicResourceValue {
 /// given locale at that moment.
 pub trait I18NFallback: Sized {
     /// Constructs the canonical fallback value.
-    ///
-    /// # Errors
-    /// Returns any error encountered while building the fallback value.
-    fn fallback() -> Result<Self>;
+    fn fallback() -> Self;
 }
 
 /// This trait groups Key, Value types for a given I18N implementation.
@@ -269,23 +390,23 @@ struct I18NCore<K: Eq + Hash + Default + Copy, V: I18NFallback> {
 }
 
 impl<K: Eq + Hash + Default + Copy, V: I18NFallback> I18NCore<K, V> {
-    fn new_empty() -> Result<Self> {
+    fn new_empty() -> Self {
         let mut store = HashMap::new();
-        store.insert(K::default(), V::fallback()?);
+        store.insert(K::default(), V::fallback());
 
-        Ok(Self {
+        Self {
             store: I18NStore(store),
-        })
+        }
     }
 
-    fn new_loaded(store: Vec<(K, V)>) -> Result<Self> {
+    fn new_loaded(store: Vec<(K, V)>) -> Self {
         let mut store = I18NStore::from(store);
 
         if let std::collections::hash_map::Entry::Vacant(entry) = store.0.entry(K::default()) {
-            entry.insert(V::fallback()?);
+            entry.insert(V::fallback());
         }
 
-        Ok(Self { store })
+        Self { store }
     }
 
     fn fallback_ref(&self) -> Result<&V> {
@@ -315,15 +436,13 @@ impl<K: Eq + Hash + Default + Copy, V: I18NFallback> I18NCore<K, V> {
         }
     }
 
-    fn unload_all(&mut self) -> Result<()> {
+    fn unload_all(&mut self) {
         let default_locale = K::default();
         self.store.0.retain(|locale, _| *locale == default_locale);
         if let std::collections::hash_map::Entry::Vacant(entry) = self.store.0.entry(default_locale)
         {
-            entry.insert(V::fallback()?);
+            entry.insert(V::fallback());
         }
-
-        Ok(())
     }
 }
 
@@ -380,10 +499,9 @@ where
     /// # Returns
     /// A new `I18NWrapper` instance.
     ///
-    /// # Errors
-    /// Returns any error encountered while constructing the fallback locale.
-    pub fn new(store: Vec<(K, V)>) -> Result<Self> {
-        Ok(Self(I18NCore::new_loaded(store)?))
+    #[must_use]
+    pub fn new(store: Vec<(K, V)>) -> Self {
+        Self(I18NCore::new_loaded(store))
     }
 
     /// Constructs a new `I18NDynamicWrapper`.
@@ -397,9 +515,8 @@ where
     /// # Returns
     /// A new `I18NDynamicWrapper` instance.
     ///
-    /// # Errors
-    /// Returns any error encountered while constructing the fallback locale.
-    pub fn new_dynamic(loaders: Vec<(K, I18NLocaleLoader<V>)>) -> Result<I18NDynamicWrapper<K, V>> {
+    #[must_use]
+    pub fn new_dynamic(loaders: Vec<(K, I18NLocaleLoader<V>)>) -> I18NDynamicWrapper<K, V> {
         I18NDynamicWrapper::new(loaders)
     }
 
@@ -458,13 +575,12 @@ where
     /// # Returns
     /// A new `I18NDynamicWrapper` instance with the fallback locale preloaded.
     ///
-    /// # Errors
-    /// Returns any error encountered while constructing the fallback locale.
-    pub fn new(loaders: Vec<(K, I18NLocaleLoader<V>)>) -> Result<Self> {
-        Ok(Self(I18NDynamicCore {
-            loaded: I18NCore::new_empty()?,
+    #[must_use]
+    pub fn new(loaders: Vec<(K, I18NLocaleLoader<V>)>) -> Self {
+        Self(I18NDynamicCore {
+            loaded: I18NCore::new_empty(),
             loaders: loaders.into_iter().collect(),
-        }))
+        })
     }
 
     /// Returns the currently loaded locale store.
@@ -509,24 +625,16 @@ where
     /// # Returns
     /// `true` if the locale had a registered loader and is now loaded.
     ///
-    /// # Errors
-    /// Returns any error produced by the locale loader.
-    pub fn load(&mut self, locale: K) -> Result<bool> {
-        self.0
-            .loaders
-            .get(&locale)
-            .copied()
-            .map_or(Ok(false), |load| {
-                self.0.loaded.insert_loaded(locale, load()?);
-                Ok(true)
-            })
+    #[must_use]
+    pub fn load(&mut self, locale: K) -> bool {
+        self.0.loaders.get(&locale).copied().is_some_and(|load| {
+            self.0.loaded.insert_loaded(locale, load());
+            true
+        })
     }
 
     /// Loads all registered locales into memory.
-    ///
-    /// # Errors
-    /// Returns any error produced by a locale loader.
-    pub fn load_all(&mut self) -> Result<()> {
+    pub fn load_all(&mut self) {
         let loaders = self
             .0
             .loaders
@@ -535,10 +643,8 @@ where
             .collect::<Vec<_>>();
 
         for (locale, load) in loaders {
-            self.0.loaded.insert_loaded(locale, load()?);
+            self.0.loaded.insert_loaded(locale, load());
         }
-
-        Ok(())
     }
 
     /// Unloads a single locale from memory.
@@ -554,10 +660,8 @@ where
 
     /// Unloads all currently loaded locales.
     ///
-    /// # Errors
-    /// Returns any error encountered while reconstructing the fallback locale.
-    pub fn unload_all(&mut self) -> Result<()> {
-        self.0.loaded.unload_all()
+    pub fn unload_all(&mut self) {
+        self.0.loaded.unload_all();
     }
 
     /// Returns whether a locale is currently loaded.

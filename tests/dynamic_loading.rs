@@ -38,7 +38,7 @@ where
 
 #[test]
 fn loads_and_unloads_locales_on_demand() {
-    let mut locales = I18NUsage::locales_dynamic().expect("locale construction should succeed");
+    let mut locales = I18NUsage::locales_dynamic();
 
     assert!(locales.is_loaded(I18NUsage::Key::en));
     assert!(locales.is_registered(I18NUsage::Key::pt));
@@ -56,9 +56,7 @@ fn loads_and_unloads_locales_on_demand() {
         Ok("Fallback literal")
     );
 
-    assert!(locales
-        .load(I18NUsage::Key::pt)
-        .expect("locale load should succeed"));
+    assert!(locales.load(I18NUsage::Key::pt));
     assert!(locales.is_loaded(I18NUsage::Key::pt));
 
     let pt = locales
@@ -91,21 +89,19 @@ fn loads_and_unloads_locales_on_demand() {
 
 #[test]
 fn shares_access_behavior_between_wrappers() {
-    let eager = I18NUsage::locales().expect("locale construction should succeed");
+    let eager = I18NUsage::locales();
     let eager_pt = eager
         .get(I18NUsage::Key::pt)
         .expect("locale access should resolve");
     assert_eq!(inferred_text(&eager_pt), "C depois A depois B");
 
-    let mut dynamic = I18NUsage::locales_dynamic().expect("locale construction should succeed");
+    let mut dynamic = I18NUsage::locales_dynamic();
     let dynamic_pt = dynamic
         .get(I18NUsage::Key::pt)
         .expect("locale access should resolve");
     assert_eq!(inferred_text(&dynamic_pt), "This is C, A, B");
 
-    assert!(dynamic
-        .load(I18NUsage::Key::pt)
-        .expect("locale load should succeed"));
+    assert!(dynamic.load(I18NUsage::Key::pt));
     let dynamic_pt = dynamic
         .get(I18NUsage::Key::pt)
         .expect("locale access should resolve");
