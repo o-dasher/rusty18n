@@ -2,7 +2,7 @@
 use bevy_reflect::Reflect;
 use derive_more::derive::{AsRef, Deref, DerefMut, Display as DeriveDisplay, From};
 use impl_trait_for_tuples::impl_for_tuples;
-use std::{collections::HashMap, fmt::Display, hash::Hash};
+use std::{collections::HashMap, fmt::Display, hash::Hash, ops::Deref};
 
 /// Errors produced by `rusty18n`.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -160,10 +160,10 @@ impl<K: Eq + Hash + Default + Copy, V: I18NFallback> I18NStore<K, V> {
     }
 
     fn resolve(&self, locale: K) -> Result<(&V, &V)> {
-        self.0
+        self.deref()
             .get(&K::default())
             .ok_or(Error::MissingFallbackLocale)
-            .map(|fallback| (fallback, self.0.get(&locale).unwrap_or(fallback)))
+            .map(|fallback| (fallback, self.deref().get(&locale).unwrap_or(fallback)))
     }
 
     fn access<L>(&self, locale: K) -> Result<I18NAccess<'_, L>>
@@ -182,7 +182,7 @@ impl<K: Eq + Hash + Default + Copy, V: I18NFallback> I18NStore<K, V> {
         self.access(locale)
     }
 
-    pub fn unload_locale(&mut self, locale: K) -> Option<V> {
+    pub fn unload(&mut self, locale: K) -> Option<V> {
         if locale == K::default() {
             None
         } else {
@@ -190,7 +190,7 @@ impl<K: Eq + Hash + Default + Copy, V: I18NFallback> I18NStore<K, V> {
         }
     }
 
-    pub fn unload_all_locales(&mut self) {
+    pub fn unload_all(&mut self) {
         let default_locale = K::default();
         self.retain(|locale, _| *locale == default_locale);
     }
@@ -268,7 +268,7 @@ where
     /// # Returns
     /// The previously registered loader for the locale, if any.
     pub fn unregister_locale(&mut self, locale: K) -> Option<I18NLocaleLoader<V>> {
-        self.loaded.unload_locale(locale);
+        self.loaded.unload(locale);
         self.loaders.remove(&locale)
     }
 
