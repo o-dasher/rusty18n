@@ -8,8 +8,6 @@ pub use crate::core::*;
 pub use crate::reflect::*;
 #[cfg(feature = "bevy_reflect")]
 pub use bevy_reflect::Reflect;
-#[doc(hidden)]
-pub use structstruck::strike as __structstruck_strike;
 
 /// Default generated i18n resource type for plain string leaves.
 pub type R = I18NDynamicResource;

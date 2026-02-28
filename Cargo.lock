@@ -340,7 +340,6 @@ dependencies = [
  "derive_more",
  "impl-trait-for-tuples",
  "paste",
- "structstruck",
 ]
 
 [[package]]
@@ -388,17 +387,6 @@ dependencies = [
  "itoa",
  "ryu",
  "serde",
-]
-
-[[package]]
-name = "structstruck"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f318209842d04696a2c139cd3d5d4d75c4a9e2af435b077aa5cbd391a79c34b3"
-dependencies = [
- "proc-macro2",
- "quote",
- "venial",
 ]
 
 [[package]]
@@ -488,16 +476,6 @@ checksum = "5de17fd2f7da591098415cff336e12965a28061ddace43b59cb3c430179c9439"
 dependencies = [
  "getrandom",
  "serde",
-]
-
-[[package]]
-name = "venial"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61584a325b16f97b5b25fcc852eb9550843a251057a5e3e5992d2376f3df4bb2"
-dependencies = [
- "proc-macro2",
- "quote",
 ]
 
 [[package]]

@@ -1,22 +1,45 @@
-/// Defines the full struct type tree for the fallback DSL.
-///
-/// Leaf forms:
-/// - `"text"` => fallback `R`, override `Option<R>`
-/// - `|args...| "format string"` => `I18NDynamicFormatter<(String, ...)>`, plus
-///   `Option<...>` in overrides
-///
-/// The DSL supports:
-/// - `field: "text"` leaves
-/// - `field: |args...| "format string"` dynamic leaves
-/// - `field: { ... }` nested blocks
+/// Expands the DSL into the generated value and override struct modules.
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __i18n_build_resource {
-    ($lit:literal) => {
-        $crate::I18NDynamicResourceValue::from($lit)
+macro_rules! i18n_define_types {
+    ($type_name:ident { $($body:tt)* }) => {
+        ::paste::paste! {
+            pub mod [<$type_name:snake>] {
+                $crate::__i18n_define_struct_tree!(value $type_name { $($body)* });
+                $crate::__i18n_define_struct_tree!(option [<$type_name Overrides>] { $($body)* });
+            }
+        }
     };
 }
 
+/// Emits one generated struct with the derives needed when `bevy_reflect` is enabled.
+#[doc(hidden)]
+#[macro_export]
+#[cfg(feature = "bevy_reflect")]
+macro_rules! __i18n_finish_struct {
+    ($type_name:ident { $($fields:tt)* }) => {
+        #[derive(Debug, Default, $crate::Reflect)]
+        #[reflect(from_reflect = false)]
+        pub struct $type_name {
+            $($fields)*
+        }
+    };
+}
+
+/// Emits one generated struct with the standard derives in non-reflect builds.
+#[doc(hidden)]
+#[macro_export]
+#[cfg(not(feature = "bevy_reflect"))]
+macro_rules! __i18n_finish_struct {
+    ($type_name:ident { $($fields:tt)* }) => {
+        #[derive(Debug, Default)]
+        pub struct $type_name {
+            $($fields)*
+        }
+    };
+}
+
+/// Maps each dynamic formatter parameter name to its stored argument type.
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __i18n_string_type {
@@ -25,314 +48,145 @@ macro_rules! __i18n_string_type {
     };
 }
 
+/// Wraps a generated leaf field type for either concrete values or sparse overrides.
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __i18n_dynamic_resource_type {
-    () => {
-        $crate::I18NDynamicFormatter<()>
+macro_rules! __i18n_wrap_type {
+    (value $ty:ty) => {
+        $ty
     };
 
-    ($($name:ident),+ $(,)?) => {
-        $crate::I18NDynamicFormatter<($( $crate::__i18n_string_type!($name), )+)>
-    };
-
-    ($($unsupported:tt)+) => {
-        ::core::compile_error!(
-            "dynamic formatter parameters support only comma-separated identifiers"
-        );
+    (option $ty:ty) => {
+        Option<$ty>
     };
 }
 
+/// Wraps a generated leaf value for either concrete values or sparse overrides.
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __i18n_build_dynamic_resource {
-    ($lit:literal; ) => {
-        $crate::I18NDynamicFormatter::new(|(): ()| ::std::format!($lit))
+macro_rules! __i18n_wrap_expr {
+    (value $expr:expr) => {
+        $expr
     };
 
-    ($lit:literal; $($name:ident),+ $(,)?) => {
-        $crate::I18NDynamicFormatter::<($( $crate::__i18n_string_type!($name), )+)>::new(
-            |($($name,)+)| ::std::format!($lit),
-        )
-    };
-
-    ($lit:literal; $($unsupported:tt)+) => {
-        ::core::compile_error!(
-            "dynamic formatter parameters support only comma-separated identifiers"
-        );
+    (option $expr:expr) => {
+        Some($expr)
     };
 }
 
-#[doc(hidden)]
-#[macro_export]
-macro_rules! i18n_define_types {
-    ($type_name:ident { $($body:tt)* }) => {
-        $crate::i18n_define_type_fields!(
-            @parse
-            [finish $type_name]
-            [$type_name]
-            []
-            []
-            []
-            []
-            $($body)*
-        );
-    };
-}
-
-#[doc(hidden)]
-#[macro_export]
-#[cfg(feature = "bevy_reflect")]
-macro_rules! i18n_define_struct {
-    ($type_name:ident { $($fields:tt)* }) => {
-        $crate::__structstruck_strike! {
-            #[structstruck::each[derive(Debug, Default, $crate::Reflect)]]
-            #[structstruck::each[reflect(from_reflect = false)]]
-            #[structstruck::each[structstruck::long_names]]
-            pub struct $type_name {
-                $($fields)*
-            }
-        }
-    };
-}
-
-#[doc(hidden)]
-#[macro_export]
-#[cfg(not(feature = "bevy_reflect"))]
-macro_rules! i18n_define_struct {
-    ($type_name:ident { $($fields:tt)* }) => {
-        $crate::__structstruck_strike! {
-            #[structstruck::each[derive(Debug, Default)]]
-            #[structstruck::each[structstruck::long_names]]
-            pub struct $type_name {
-                $($fields)*
-            }
-        }
-    };
-}
-
-/// Walks the nested i18n DSL and rewrites it into `structstruck::strike!` fields.
+/// Recursively parses the schema DSL into concrete nested struct definitions.
 ///
-/// This uses a small accumulator so `structstruck` receives a fully-built
-/// field tree instead of nested macro calls in its input.
-///
-/// Leaf semantics:
-/// - fallback static leaf: `R`
-/// - fallback dynamic leaf: `I18NDynamicFormatter<(String, ...)>`
-/// - override leaves wrap the same type in `Option`
+/// `value` mode emits concrete leaf types, while `option` mode wraps leaves in
+/// `Option` for sparse locale overrides.
 #[doc(hidden)]
 #[macro_export]
-macro_rules! i18n_define_type_fields {
-    (@parse
-        [$($callback:tt)+]
-        [$root:ident]
-        [$($path:ident,)*]
-        [$($leaf_defs:tt)*]
-        [$($value_out:tt)*]
-        [$($override_out:tt)*]
-    ) => {
-        $crate::i18n_define_type_fields!(
-            @call
-            [$($callback)+]
-            [$($leaf_defs)*]
-            [$($value_out)*]
-            [$($override_out)*]
-        );
+macro_rules! __i18n_define_struct_tree {
+    ($mode:ident $type_name:ident { $($body:tt)* }) => {
+        $crate::__i18n_define_struct_tree!(@parse $mode $type_name [] [] $($body)*);
     };
 
-    (@parse
-        [$($callback:tt)+]
-        [$root:ident]
-        [$($path:ident,)*]
-        [$($leaf_defs:tt)*]
-        [$($value_out:tt)*]
-        [$($override_out:tt)*]
-        $field:ident : { $($nested:tt)* }
+    (@parse $mode:ident $type_name:ident [$($fields:tt)*] [$($nested:tt)*]) => {
+        $crate::__i18n_finish_struct!($type_name { $($fields)* });
+        $($nested)*
+    };
+
+    (@parse $mode:ident $type_name:ident [$($fields:tt)*] [$($nested:tt)*]
+        $field:ident : { $($nested_body:tt)* }
         $(, $($rest:tt)*)?
     ) => {
-        $crate::i18n_define_type_fields!(
-            @parse
-            [
-                finish_nested
-                [$($callback)+]
-                [$root]
-                [$($path,)*]
-                [$($leaf_defs)*]
-                [$($value_out)*]
-                [$($override_out)*]
-                $field
-                [$($($rest)*)?]
-            ]
-            [$root]
-            [$($path,)* $field,]
-            []
-            []
-            []
-            $($nested)*
-        );
+        ::paste::paste! {
+            $crate::__i18n_define_struct_tree!(
+                @parse
+                $mode
+                $type_name
+                [
+                    $($fields)*
+                    pub $field: [<$type_name $field:camel>],
+                ]
+                [
+                    $($nested)*
+                    $crate::__i18n_define_struct_tree!(
+                        $mode
+                        [<$type_name $field:camel>]
+                        { $($nested_body)* }
+                    );
+                ]
+                $($($rest)*)?
+            );
+        }
     };
 
-    (@parse
-        [$($callback:tt)+]
-        [$root:ident]
-        [$($path:ident,)*]
-        [$($leaf_defs:tt)*]
-        [$($value_out:tt)*]
-        [$($override_out:tt)*]
-        $field:ident : | $($rest:tt)+
-    ) => {
-        $crate::i18n_define_type_fields!(
-            @dynamic
-            [$($callback)+]
-            [$root]
-            [$($path,)*]
-            [$($leaf_defs)*]
-            [$($value_out)*]
-            [$($override_out)*]
-            $field
-            []
-            $($rest)+
-        );
-    };
-
-    (@dynamic
-        [$($callback:tt)+]
-        [$root:ident]
-        [$($path:ident,)*]
-        [$($leaf_defs:tt)*]
-        [$($value_out:tt)*]
-        [$($override_out:tt)*]
-        $field:ident
-        [$($params:tt)*]
-        | $lit:literal
+    (@parse $mode:ident $type_name:ident [$($fields:tt)*] [$($nested:tt)*]
+        $field:ident : | $($name:ident),* $(,)? | $lit:literal
         $(, $($rest:tt)*)?
     ) => {
-        $crate::i18n_define_type_fields!(
+        $crate::__i18n_define_struct_tree!(
             @parse
-            [$($callback)+]
-            [$root]
-            [$($path,)*]
-            [$($leaf_defs)*]
+            $mode
+            $type_name
             [
-                $($value_out)*
-                pub $field: $crate::__i18n_dynamic_resource_type!($($params)*),
+                $($fields)*
+                pub $field: $crate::__i18n_wrap_type!(
+                    $mode
+                    $crate::I18NDynamicFormatter<($( $crate::__i18n_string_type!($name), )*)>
+                ),
             ]
-            [
-                $($override_out)*
-                pub $field: Option<$crate::__i18n_dynamic_resource_type!($($params)*)>,
-            ]
+            [$($nested)*]
             $($($rest)*)?
         );
     };
 
-    (@dynamic
-        [$($callback:tt)+]
-        [$root:ident]
-        [$($path:ident,)*]
-        [$($leaf_defs:tt)*]
-        [$($value_out:tt)*]
-        [$($override_out:tt)*]
-        $field:ident
-        [$($params:tt)*]
-        $next:tt
-        $($rest:tt)*
-    ) => {
-        $crate::i18n_define_type_fields!(
-            @dynamic
-            [$($callback)+]
-            [$root]
-            [$($path,)*]
-            [$($leaf_defs)*]
-            [$($value_out)*]
-            [$($override_out)*]
-            $field
-            [$($params)* $next]
-            $($rest)*
-        );
-    };
-
-    (@parse
-        [$($callback:tt)+]
-        [$root:ident]
-        [$($path:ident,)*]
-        [$($leaf_defs:tt)*]
-        [$($value_out:tt)*]
-        [$($override_out:tt)*]
+    (@parse $mode:ident $type_name:ident [$($fields:tt)*] [$($nested:tt)*]
         $field:ident : $lit:literal
         $(, $($rest:tt)*)?
     ) => {
-        $crate::i18n_define_type_fields!(
+        $crate::__i18n_define_struct_tree!(
             @parse
-            [$($callback)+]
-            [$root]
-            [$($path,)*]
-            [$($leaf_defs)*]
+            $mode
+            $type_name
             [
-                $($value_out)*
-                pub $field: $crate::R,
+                $($fields)*
+                pub $field: $crate::__i18n_wrap_type!($mode $crate::R),
             ]
-            [
-                $($override_out)*
-                pub $field: Option<$crate::R>,
-            ]
+            [$($nested)*]
             $($($rest)*)?
         );
     };
+}
 
-    (@call
-        [
-            finish_nested
-            [$($callback:tt)+]
-            [$root:ident]
-            [$($path:ident,)*]
-            [$($outer_leaf_defs:tt)*]
-            [$($outer_value_out:tt)*]
-            [$($outer_override_out:tt)*]
-            $field:ident
-            [$($rest:tt)*]
-        ]
-        [$($nested_leaf_defs:tt)*]
-        [$($nested_value_out:tt)*]
-        [$($nested_override_out:tt)*]
-    ) => {
-        $crate::i18n_define_type_fields!(
-            @parse
-            [$($callback)+]
-            [$root]
-            [$($path,)*]
-            [
-                $($outer_leaf_defs)*
-                $($nested_leaf_defs)*
-            ]
-            [
-                $($outer_value_out)*
-                pub $field: struct {
-                    $($nested_value_out)*
-                },
-            ]
-            [
-                $($outer_override_out)*
-                pub $field: struct {
-                    $($nested_override_out)*
-                },
-            ]
-            $($rest)*
-        );
+/// Recursively applies the locale DSL onto a concrete value or sparse override.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __i18n_build {
+    ($mode:ident $base:expr; $($body:tt)*) => {
+        {
+            let mut __value = $base;
+            $crate::__i18n_build!(@apply $mode __value; $($body)*);
+            __value
+        }
     };
 
-    (@call
-        [finish $type_name:ident]
-        [$($leaf_defs:tt)*]
-        [$($value_fields:tt)*]
-        [$($override_fields:tt)*]
-    ) => {
-        ::paste::paste! {
-            pub mod [<$type_name:snake>] {
-                $($leaf_defs)*
-                $crate::i18n_define_struct!($type_name { $($value_fields)* });
-                $crate::i18n_define_struct!([<$type_name Overrides>] { $($override_fields)* });
-            }
-        }
+    (@apply $mode:ident $value:ident;) => {};
+
+    (@apply $mode:ident $value:ident; $field:ident : { $($nested:tt)* } $(, $($rest:tt)*)?) => {
+        $value.$field = $crate::__i18n_build!($mode $value.$field; $($nested)*);
+        $crate::__i18n_build!(@apply $mode $value; $($($rest)*)?);
+    };
+
+    (@apply $mode:ident $value:ident; $field:ident : | $($name:ident),* $(,)? | $lit:literal $(, $($rest:tt)*)?) => {
+        $value.$field = $crate::__i18n_wrap_expr!(
+            $mode
+            $crate::I18NDynamicFormatter::<($( $crate::__i18n_string_type!($name), )*)>::new(
+                |($($name,)*)| ::std::format!($lit),
+            )
+        );
+        $crate::__i18n_build!(@apply $mode $value; $($($rest)*)?);
+    };
+
+    (@apply $mode:ident $value:ident; $field:ident : $lit:literal $(, $($rest:tt)*)?) => {
+        $value.$field =
+            $crate::__i18n_wrap_expr!($mode $crate::I18NDynamicResourceValue::from($lit));
+        $crate::__i18n_build!(@apply $mode $value; $($($rest)*)?);
     };
 }
 
@@ -349,36 +203,7 @@ macro_rules! i18n_define_type_fields {
 #[macro_export]
 macro_rules! i18n_build_value {
     ($base:expr; $($body:tt)*) => {
-        {
-            let mut __value = $base;
-            $crate::i18n_build_value!(@apply __value; $($body)*);
-            __value
-        }
-    };
-
-    (@apply $value:ident;) => {};
-
-    (@apply $value:ident; $field:ident : { $($nested:tt)* } $(, $($rest:tt)*)?) => {
-        $value.$field = $crate::i18n_build_value!($value.$field; $($nested)*);
-        $crate::i18n_build_value!(@apply $value; $($($rest)*)?);
-    };
-
-    (@apply $value:ident; $field:ident : | $($rest:tt)+) => {
-        $crate::i18n_build_value!(@dynamic $value; $field [] $($rest)+);
-    };
-
-    (@dynamic $value:ident; $field:ident [$($params:tt)*] | $lit:literal $(, $($rest:tt)*)?) => {
-        $value.$field = $crate::__i18n_build_dynamic_resource!($lit; $($params)*);
-        $crate::i18n_build_value!(@apply $value; $($($rest)*)?);
-    };
-
-    (@dynamic $value:ident; $field:ident [$($params:tt)*] $next:tt $($rest:tt)*) => {
-        $crate::i18n_build_value!(@dynamic $value; $field [$($params)* $next] $($rest)*);
-    };
-
-    (@apply $value:ident; $field:ident : $lit:literal $(, $($rest:tt)*)?) => {
-        $value.$field = $crate::__i18n_build_resource!($lit);
-        $crate::i18n_build_value!(@apply $value; $($($rest)*)?);
+        $crate::__i18n_build!(value $base; $($body)*)
     };
 }
 
@@ -389,36 +214,7 @@ macro_rules! i18n_build_value {
 #[macro_export]
 macro_rules! i18n_build_override {
     ($base:expr; $($body:tt)*) => {
-        {
-            let mut __value = $base;
-            $crate::i18n_build_override!(@apply __value; $($body)*);
-            __value
-        }
-    };
-
-    (@apply $value:ident;) => {};
-
-    (@apply $value:ident; $field:ident : { $($nested:tt)* } $(, $($rest:tt)*)?) => {
-        $value.$field = $crate::i18n_build_override!($value.$field; $($nested)*);
-        $crate::i18n_build_override!(@apply $value; $($($rest)*)?);
-    };
-
-    (@apply $value:ident; $field:ident : | $($rest:tt)+) => {
-        $crate::i18n_build_override!(@dynamic $value; $field [] $($rest)+);
-    };
-
-    (@dynamic $value:ident; $field:ident [$($params:tt)*] | $lit:literal $(, $($rest:tt)*)?) => {
-        $value.$field = Some($crate::__i18n_build_dynamic_resource!($lit; $($params)*));
-        $crate::i18n_build_override!(@apply $value; $($($rest)*)?);
-    };
-
-    (@dynamic $value:ident; $field:ident [$($params:tt)*] $next:tt $($rest:tt)*) => {
-        $crate::i18n_build_override!(@dynamic $value; $field [$($params)* $next] $($rest)*);
-    };
-
-    (@apply $value:ident; $field:ident : $lit:literal $(, $($rest:tt)*)?) => {
-        $value.$field = Some($crate::__i18n_build_resource!($lit));
-        $crate::i18n_build_override!(@apply $value; $($($rest)*)?);
+        $crate::__i18n_build!(option $base; $($body)*)
     };
 }
 
@@ -443,11 +239,15 @@ macro_rules! define_i18n_fallback {
         $($body:tt)*
     ) => {
         ::paste::paste! {
-            $crate::i18n_define_types!($root_type { $($body)* });
+            pub mod [<$root_type:snake>] {
+                $crate::__i18n_define_struct_tree!(value $root_type { $($body)* });
+                $crate::__i18n_define_struct_tree!(option [<$root_type Overrides>] { $($body)* });
+            }
 
             impl $crate::I18NFallback for [<$root_type:snake>]::$root_type {
                 fn fallback() -> Self {
-                    $crate::i18n_build_value!(
+                    $crate::__i18n_build!(
+                        value
                         <[<$root_type:snake>]::$root_type as ::core::default::Default>::default();
                         $($body)*
                     )
@@ -485,7 +285,8 @@ macro_rules! define_i18n {
     ) => {
         ::paste::paste! {
             pub fn [<$locale_key:lower>]() -> $base_i18n::Override {
-                $crate::i18n_build_override!(
+                $crate::__i18n_build!(
+                    option
                     <$base_i18n::Override as ::core::default::Default>::default();
                     $($body)*
                 )
@@ -564,6 +365,8 @@ macro_rules! define_i18n_locales {
 }
 
 /// Defines a local accessor macro bound to a resolved locale view.
+///
+/// This is a convenience wrapper around `resolve` for a shared prefix path.
 #[macro_export]
 macro_rules! t_prefix {
     ($dollar:tt$name:ident, $prefix_var:ident $(. $prefix_access:tt)*) => {
@@ -577,16 +380,14 @@ macro_rules! t_prefix {
         }
     };
 
-    ($dollar:tt $name:ident, $prefix_var:ident $(. $prefix_access:tt)*) => {
-        $crate::t_prefix!($dollar$name, $prefix_var $(.$prefix_access)*)
-    };
-
     ($dollar:tt$prefix_var:ident $(.$prefix_access:tt)*) => {
         $crate::t_prefix!($dollar t, $prefix_var $(. $prefix_access)*)
     };
 }
 
 /// Reads a translation value from a resolved locale view.
+///
+/// This resolves a value against the fallback locale and any active override.
 #[macro_export]
 macro_rules! t {
     ($var:ident.$($access:tt).*) => {
