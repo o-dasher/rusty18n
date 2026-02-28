@@ -18,7 +18,7 @@ pub use structstruck::strike as __structstruck_strike;
 /// It stores a compile-time validated template and supports inferred positional
 /// rendering through `.with(&[...])`.
 /// Plain strings and strings with `{placeholders}` both use this type.
-pub type R = I18NDynamicResource;
+pub type R<const N: usize = 0> = I18NDynamicResource<N>;
 
 /// Dynamic i18n resource type.
-pub type I18NDynamicResource = crate::core::I18NDynamicResourceValue;
+pub type I18NDynamicResource<const N: usize = 0> = crate::core::I18NDynamicResourceValue<N>;

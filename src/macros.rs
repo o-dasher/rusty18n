@@ -11,7 +11,7 @@
 #[macro_export]
 macro_rules! __i18n_resource_type {
     ($lit:literal) => {
-        $crate::R
+        $crate::R<{ $crate::__template_arity($lit) }>
     };
 }
 
@@ -19,25 +19,21 @@ macro_rules! __i18n_resource_type {
 #[macro_export]
 macro_rules! __i18n_build_resource {
     ($lit:literal) => {{
-        static DISPLAY_TEXT: ::std::sync::OnceLock<::std::boxed::Box<str>> =
-            ::std::sync::OnceLock::new();
-        static RENDER_PLAN: ::std::sync::OnceLock<::std::boxed::Box<[$crate::I18NRenderPart]>> =
-            ::std::sync::OnceLock::new();
-        const HAS_ESCAPES: bool = $crate::__template_has_escapes($lit);
-        const _: usize = $crate::__template_arity($lit);
+        const _: [(); 1] = [(); $crate::__template_is_valid($lit) as usize];
+        const DISPLAY_LEN: usize = $crate::__normalized_template_len($lit);
+        const DISPLAY_BYTES: [u8; DISPLAY_LEN] = $crate::__build_normalized_template($lit);
+        const DISPLAY_TEXT: &str = $crate::__utf8(&DISPLAY_BYTES);
+        const SLOT_COUNT: usize = $crate::__template_slot_count($lit);
+        const RENDER_PLAN: $crate::I18NRenderPlan<SLOT_COUNT> = $crate::__build_render_plan($lit);
 
-        $crate::I18NDynamicResourceValue::new_static(
-            if HAS_ESCAPES {
-                DISPLAY_TEXT
-                    .get_or_init(|| $crate::__normalize_template($lit).into_boxed_str())
-                    .as_ref()
-            } else {
+        $crate::I18NDynamicResourceValue::<{ $crate::__template_arity($lit) }>::new_static(
+            if DISPLAY_LEN == $lit.len() {
                 $lit
+            } else {
+                DISPLAY_TEXT
             },
             $lit,
-            RENDER_PLAN
-                .get_or_init(|| $crate::__build_render_plan($lit))
-                .as_ref(),
+            &RENDER_PLAN.slots,
         )
     }};
 }

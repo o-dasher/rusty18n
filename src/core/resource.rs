@@ -1,7 +1,40 @@
 #[cfg(feature = "bevy_reflect")]
 use bevy_reflect::Reflect;
 use derive_more::derive::{AsRef, Deref, Display as DeriveDisplay};
-use std::fmt::Display;
+use std::fmt::{Display, Write};
+
+#[doc(hidden)]
+#[must_use]
+pub const fn __template_is_valid(template: &str) -> bool {
+    let bytes = template.as_bytes();
+    let mut index = 0;
+
+    while index < bytes.len() {
+        match bytes[index] {
+            b'{' => {
+                if index + 1 < bytes.len() && bytes[index + 1] == b'{' {
+                    index += 2;
+                } else if let Some(name_end) = placeholder_end_checked(bytes, index + 1) {
+                    index = name_end + 1;
+                } else {
+                    return false;
+                }
+            }
+            b'}' => {
+                if index + 1 < bytes.len() && bytes[index + 1] == b'}' {
+                    index += 2;
+                } else {
+                    return false;
+                }
+            }
+            _ => {
+                index += 1;
+            }
+        }
+    }
+
+    true
+}
 
 #[doc(hidden)]
 #[must_use]
@@ -15,23 +48,20 @@ pub const fn __template_arity(template: &str) -> usize {
             b'{' => {
                 if index + 1 < bytes.len() && bytes[index + 1] == b'{' {
                     index += 2;
-                } else {
+                } else if let Some(name_end) = placeholder_end_checked(bytes, index + 1) {
                     let name_start = index + 1;
-                    let name_end = placeholder_end(bytes, name_start);
 
                     if !placeholder_seen_before(bytes, index, name_start, name_end) {
                         arity += 1;
                     }
 
                     index = name_end + 1;
+                } else {
+                    index += 1;
                 }
             }
-            b'}' => {
-                if index + 1 < bytes.len() && bytes[index + 1] == b'}' {
-                    index += 2;
-                } else {
-                    panic!("invalid template literal");
-                }
+            b'}' if index + 1 < bytes.len() && bytes[index + 1] == b'}' => {
+                index += 2;
             }
             _ => {
                 index += 1;
@@ -44,41 +74,125 @@ pub const fn __template_arity(template: &str) -> usize {
 
 #[doc(hidden)]
 #[must_use]
-pub const fn __template_has_escapes(template: &str) -> bool {
+pub const fn __template_slot_count(template: &str) -> usize {
     let bytes = template.as_bytes();
     let mut index = 0;
+    let mut count = 0;
 
-    while index + 1 < bytes.len() {
-        if (bytes[index] == b'{' || bytes[index] == b'}') && bytes[index] == bytes[index + 1] {
-            return true;
+    while index < bytes.len() {
+        match bytes[index] {
+            b'{' => {
+                if index + 1 < bytes.len() && bytes[index + 1] == b'{' {
+                    index += 2;
+                } else if let Some(name_end) = placeholder_end_checked(bytes, index + 1) {
+                    count += 1;
+                    index = name_end + 1;
+                } else {
+                    index += 1;
+                }
+            }
+            b'}' if index + 1 < bytes.len() && bytes[index + 1] == b'}' => {
+                index += 2;
+            }
+            _ => {
+                index += 1;
+            }
         }
-
-        index += 1;
     }
 
-    false
+    count
 }
 
 #[doc(hidden)]
 #[must_use]
-pub fn __normalize_template(template: &str) -> String {
+pub const fn __normalized_template_len(template: &str) -> usize {
     let bytes = template.as_bytes();
     let mut index = 0;
-    let mut normalized = String::with_capacity(template.len());
+    let mut length = 0;
 
     while index < bytes.len() {
         match bytes[index] {
             b'{' if index + 1 < bytes.len() && bytes[index + 1] == b'{' => {
-                normalized.push('{');
+                length += 1;
                 index += 2;
             }
             b'}' if index + 1 < bytes.len() && bytes[index + 1] == b'}' => {
-                normalized.push('}');
+                length += 1;
                 index += 2;
             }
+            b'{' => {
+                if let Some(name_end) = placeholder_end_checked(bytes, index + 1) {
+                    length += name_end + 1 - index;
+                    index = name_end + 1;
+                } else {
+                    length += 1;
+                    index += 1;
+                }
+            }
             _ => {
-                normalized.push(bytes[index] as char);
+                length += 1;
                 index += 1;
+            }
+        }
+    }
+
+    length
+}
+
+#[doc(hidden)]
+#[must_use]
+pub const fn __build_normalized_template<const N: usize>(template: &str) -> [u8; N] {
+    let bytes = template.as_bytes();
+    let mut normalized = [0; N];
+    let mut source_index = 0;
+    let mut output_index = 0;
+
+    while source_index < bytes.len() {
+        match bytes[source_index] {
+            b'{' if source_index + 1 < bytes.len() && bytes[source_index + 1] == b'{' => {
+                if output_index < N {
+                    normalized[output_index] = b'{';
+                }
+                source_index += 2;
+                output_index += 1;
+            }
+            b'}' if source_index + 1 < bytes.len() && bytes[source_index + 1] == b'}' => {
+                if output_index < N {
+                    normalized[output_index] = b'}';
+                }
+                source_index += 2;
+                output_index += 1;
+            }
+            b'{' => {
+                if let Some(name_end) = placeholder_end_checked(bytes, source_index + 1) {
+                    while source_index <= name_end {
+                        if output_index < N {
+                            normalized[output_index] = bytes[source_index];
+                        }
+                        source_index += 1;
+                        output_index += 1;
+                    }
+                } else {
+                    if output_index < N {
+                        normalized[output_index] = b'{';
+                    }
+                    source_index += 1;
+                    output_index += 1;
+                }
+            }
+            b'}' => {
+                if output_index < N {
+                    normalized[output_index] = b'}';
+                }
+                source_index += 1;
+                output_index += 1;
+            }
+            _ => {
+                if output_index < N {
+                    normalized[output_index] = bytes[source_index];
+                }
+                source_index += 1;
+                output_index += 1;
             }
         }
     }
@@ -86,29 +200,34 @@ pub fn __normalize_template(template: &str) -> String {
     normalized
 }
 
-const fn placeholder_end(bytes: &[u8], start: usize) -> usize {
-    assert!(
-        start < bytes.len() && is_identifier_start(bytes[start]),
-        "invalid template literal"
-    );
+#[doc(hidden)]
+#[must_use]
+pub const fn __utf8<const N: usize>(bytes: &[u8; N]) -> &str {
+    match std::str::from_utf8(bytes) {
+        Ok(text) => text,
+        Err(_) => "",
+    }
+}
+
+const fn placeholder_end_checked(bytes: &[u8], start: usize) -> Option<usize> {
+    if start >= bytes.len() || !is_identifier_start(bytes[start]) {
+        return None;
+    }
 
     let mut index = start + 1;
 
     while index < bytes.len() && bytes[index] != b'}' {
-        assert!(
-            is_identifier_continue(bytes[index]),
-            "invalid template literal"
-        );
-
+        if !is_identifier_continue(bytes[index]) {
+            return None;
+        }
         index += 1;
     }
 
-    assert!(
-        !(index >= bytes.len() || bytes[index] != b'}'),
-        "invalid template literal"
-    );
+    if index >= bytes.len() || bytes[index] != b'}' {
+        return None;
+    }
 
-    index
+    Some(index)
 }
 
 const fn placeholder_seen_before(
@@ -124,9 +243,8 @@ const fn placeholder_seen_before(
             b'{' => {
                 if index + 1 < bytes.len() && bytes[index + 1] == b'{' {
                     index += 2;
-                } else {
+                } else if let Some(candidate_end) = placeholder_end_checked(bytes, index + 1) {
                     let candidate_start = index + 1;
-                    let candidate_end = placeholder_end(bytes, candidate_start);
 
                     if bytes_eq(
                         bytes,
@@ -139,14 +257,12 @@ const fn placeholder_seen_before(
                     }
 
                     index = candidate_end + 1;
+                } else {
+                    index += 1;
                 }
             }
-            b'}' => {
-                if index + 1 < bytes.len() && bytes[index + 1] == b'}' {
-                    index += 2;
-                } else {
-                    panic!("invalid template literal");
-                }
+            b'}' if index + 1 < bytes.len() && bytes[index + 1] == b'}' => {
+                index += 2;
             }
             _ => {
                 index += 1;
@@ -176,7 +292,6 @@ const fn bytes_eq(
         if bytes[left_start + offset] != bytes[right_start + offset] {
             return false;
         }
-
         offset += 1;
     }
 
@@ -191,86 +306,101 @@ const fn is_identifier_continue(byte: u8) -> bool {
     byte == b'_' || byte.is_ascii_alphanumeric()
 }
 
-fn placeholder_end_runtime(bytes: &[u8], start: usize) -> Option<usize> {
-    if start >= bytes.len() || !is_identifier_start(bytes[start]) {
-        return None;
-    }
+#[derive(Clone, Copy, Debug, Default)]
+#[doc(hidden)]
+pub struct I18NRenderSlot {
+    pub placeholder_start: usize,
+    pub placeholder_end: usize,
+    pub argument_index: usize,
+}
 
-    let mut index = start + 1;
-
-    while index < bytes.len() && bytes[index] != b'}' {
-        if !is_identifier_continue(bytes[index]) {
-            return None;
-        }
-
-        index += 1;
-    }
-
-    (index < bytes.len() && bytes[index] == b'}').then_some(index)
+impl I18NRenderSlot {
+    const EMPTY: Self = Self {
+        placeholder_start: 0,
+        placeholder_end: 0,
+        argument_index: 0,
+    };
 }
 
 #[derive(Debug)]
 #[doc(hidden)]
-pub enum I18NRenderPart {
-    Literal(Box<str>),
-    Argument(usize),
-}
-
-fn push_literal(parts: &mut Vec<I18NRenderPart>, literal: &mut String) {
-    if !literal.is_empty() {
-        parts.push(I18NRenderPart::Literal(
-            std::mem::take(literal).into_boxed_str(),
-        ));
-    }
+pub struct I18NRenderPlan<const N: usize> {
+    pub slots: [I18NRenderSlot; N],
 }
 
 #[doc(hidden)]
 #[must_use]
-pub fn __build_render_plan(template: &str) -> Box<[I18NRenderPart]> {
+pub const fn __build_render_plan<const N: usize>(template: &str) -> I18NRenderPlan<N> {
     let bytes = template.as_bytes();
-    let mut parts = Vec::new();
-    let mut literal = String::with_capacity(template.len());
-    let mut placeholders = Vec::new();
+    let mut slots = [I18NRenderSlot::EMPTY; N];
+    let mut unique_starts = [0; N];
+    let mut unique_ends = [0; N];
+    let mut unique_len = 0;
+    let mut slot_index = 0;
     let mut index = 0;
+    let mut render_index = 0;
 
     while index < bytes.len() {
         match bytes[index] {
-            b'{' if index + 1 < bytes.len() && bytes[index + 1] == b'{' => {
-                literal.push('{');
-                index += 2;
+            b'{' => {
+                if index + 1 < bytes.len() && bytes[index + 1] == b'{' {
+                    index += 2;
+                    render_index += 1;
+                } else if let Some(name_end) = placeholder_end_checked(bytes, index + 1) {
+                    let name_start = index + 1;
+                    let placeholder_len = name_end + 1 - index;
+                    let mut argument_index = 0;
+                    let mut found = false;
+
+                    while argument_index < unique_len {
+                        if bytes_eq(
+                            bytes,
+                            unique_starts[argument_index],
+                            unique_ends[argument_index],
+                            name_start,
+                            name_end,
+                        ) {
+                            found = true;
+                            break;
+                        }
+                        argument_index += 1;
+                    }
+
+                    if !found && unique_len < N {
+                        unique_starts[unique_len] = name_start;
+                        unique_ends[unique_len] = name_end;
+                        argument_index = unique_len;
+                        unique_len += 1;
+                    }
+
+                    if slot_index < N {
+                        slots[slot_index] = I18NRenderSlot {
+                            placeholder_start: render_index,
+                            placeholder_end: render_index + placeholder_len,
+                            argument_index,
+                        };
+                        slot_index += 1;
+                    }
+
+                    index = name_end + 1;
+                    render_index += placeholder_len;
+                } else {
+                    index += 1;
+                    render_index += 1;
+                }
             }
             b'}' if index + 1 < bytes.len() && bytes[index + 1] == b'}' => {
-                literal.push('}');
                 index += 2;
-            }
-            b'{' => {
-                let Some(name_end) = placeholder_end_runtime(bytes, index + 1) else {
-                    literal.push('{');
-                    index += 1;
-                    continue;
-                };
-                let name = &template[index + 1..name_end];
-                push_literal(&mut parts, &mut literal);
-                let render_index = placeholders
-                    .iter()
-                    .position(|candidate| *candidate == name)
-                    .unwrap_or_else(|| {
-                        let current = placeholders.len();
-                        placeholders.push(name);
-                        current
-                    });
-                parts.push(I18NRenderPart::Argument(render_index));
-                index = name_end + 1;
+                render_index += 1;
             }
             _ => {
-                literal.push(bytes[index] as char);
                 index += 1;
+                render_index += 1;
             }
         }
     }
 
-    push_literal(&mut parts, &mut literal);
-    parts.into_boxed_slice()
+    I18NRenderPlan { slots }
 }
 
 /// A struct representing an internationalization (i18n) dynamic resource.
@@ -278,7 +408,7 @@ pub fn __build_render_plan(template: &str) -> Box<[I18NRenderPart]> {
 #[cfg_attr(feature = "bevy_reflect", derive(Reflect))]
 #[display("{}", display_text)]
 #[doc(hidden)]
-pub struct I18NDynamicResourceValue {
+pub struct I18NDynamicResourceValue<const N: usize> {
     #[cfg_attr(feature = "bevy_reflect", reflect(ignore))]
     template: &'static str,
     /// Template text with escaped braces resolved.
@@ -287,16 +417,16 @@ pub struct I18NDynamicResourceValue {
     #[deref(forward)]
     display_text: &'static str,
     #[cfg_attr(feature = "bevy_reflect", reflect(ignore))]
-    render_plan: &'static [I18NRenderPart],
+    render_plan: &'static [I18NRenderSlot],
 }
 
-impl I18NDynamicResourceValue {
+impl<const N: usize> I18NDynamicResourceValue<N> {
     #[doc(hidden)]
     #[must_use]
     pub const fn new_static(
         display_text: &'static str,
         template: &'static str,
-        render_plan: &'static [I18NRenderPart],
+        render_plan: &'static [I18NRenderSlot],
     ) -> Self {
         Self {
             template,
@@ -309,42 +439,43 @@ impl I18NDynamicResourceValue {
     ///
     /// # Arguments
     /// * `args` - Positional arguments for the inferred placeholders.
-    ///   Each item is rendered through `ToString`.
+    ///   Each item is rendered directly through `Display`.
     ///
     /// # Returns
     /// A string representing the localized resource.
-    ///
     #[must_use]
-    pub fn with<S, const N: usize>(&self, args: &[S; N]) -> String
+    pub fn with<S>(&self, args: &[S; N]) -> String
     where
         S: Display,
     {
         let mut output = String::with_capacity(self.display_text.len());
+        let mut cursor = 0;
 
-        for part in self.render_plan {
-            match part {
-                I18NRenderPart::Literal(text) => output.push_str(text),
-                I18NRenderPart::Argument(index) => {
-                    if let Some(value) = args.get(*index) {
-                        output.push_str(&value.to_string());
-                    }
-                }
+        for slot in self.render_plan {
+            output.push_str(&self.display_text[cursor..slot.placeholder_start]);
+
+            if write!(&mut output, "{}", &args[slot.argument_index]).is_err() {
+                return output;
             }
+
+            cursor = slot.placeholder_end;
         }
+
+        output.push_str(&self.display_text[cursor..]);
 
         output
     }
 }
 
-impl PartialEq for I18NDynamicResourceValue {
+impl<const N: usize> PartialEq for I18NDynamicResourceValue<N> {
     fn eq(&self, other: &Self) -> bool {
         self.template == other.template
     }
 }
 
-impl Eq for I18NDynamicResourceValue {}
+impl<const N: usize> Eq for I18NDynamicResourceValue<N> {}
 
-impl PartialEq<str> for I18NDynamicResourceValue {
+impl<const N: usize> PartialEq<str> for I18NDynamicResourceValue<N> {
     fn eq(&self, other: &str) -> bool {
         self.display_text == other
     }
