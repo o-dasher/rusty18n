@@ -9,6 +9,35 @@
 /// - `field: { ... }` nested blocks
 #[doc(hidden)]
 #[macro_export]
+macro_rules! __i18n_resource_type {
+    ($lit:literal) => {
+        $crate::R
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __i18n_build_resource {
+    ($lit:literal) => {{
+        static DISPLAY_TEXT: ::std::sync::OnceLock<::std::boxed::Box<str>> =
+            ::std::sync::OnceLock::new();
+        const _: usize = $crate::__template_arity($lit);
+
+        $crate::I18NDynamicResourceValue::new_static(
+            if $crate::__template_has_escapes($lit) {
+                DISPLAY_TEXT
+                    .get_or_init(|| $crate::__normalize_template($lit).into_boxed_str())
+                    .as_ref()
+            } else {
+                $lit
+            },
+            $lit,
+        )
+    }};
+}
+
+#[doc(hidden)]
+#[macro_export]
 macro_rules! i18n_define_types {
     ($type_name:ident { $($body:tt)* }) => {
         $crate::i18n_define_type_fields!(@parse [finish $type_name] [] [] $($body)*);
@@ -76,11 +105,11 @@ macro_rules! i18n_define_type_fields {
             [$callback $($ctx)*]
             [
                 $($value_out)*
-                pub $field: $crate::__i18n_resource_type!($crate, $lit),
+                pub $field: $crate::__i18n_resource_type!($lit),
             ]
             [
                 $($override_out)*
-                pub $field: Option<$crate::__i18n_resource_type!($crate, $lit)>,
+                pub $field: Option<$crate::__i18n_resource_type!($lit)>,
             ]
             $($($rest)*)?
         );
@@ -156,7 +185,7 @@ macro_rules! i18n_build_value {
             @collect [$base]
             [
                 $($fields)*
-                $field: $crate::__i18n_build_resource!($crate, $lit),
+                $field: $crate::__i18n_build_resource!($lit),
             ]
             $($($rest)*)?
         )
@@ -197,7 +226,7 @@ macro_rules! i18n_build_override {
             @collect [$base]
             [
                 $($fields)*
-                $field: Some($crate::__i18n_build_resource!($crate, $lit)),
+                $field: Some($crate::__i18n_build_resource!($lit)),
             ]
             $($($rest)*)?
         )

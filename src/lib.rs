@@ -11,18 +11,14 @@ pub use bevy_reflect::Reflect;
 #[doc(hidden)]
 pub use deep_struct_update::update as __deep_update;
 #[doc(hidden)]
-pub use rusty18n_macros::__i18n_build_resource;
-#[doc(hidden)]
-pub use rusty18n_macros::__i18n_resource_type;
-#[doc(hidden)]
 pub use structstruck::strike as __structstruck_strike;
 
 /// Default generated i18n resource type.
 ///
-/// It stores a compile-time generated formatter and supports compile-time arity-checked
-/// positional rendering through `.with((...))`.
+/// It stores a compile-time validated template and supports inferred positional
+/// rendering through `.with((...))`.
 /// Plain strings and strings with `{placeholders}` both use this type.
-pub type R<M = ()> = I18NDynamicResource<M>;
+pub type R = I18NDynamicResource;
 
 /// Dynamic i18n resource type.
-pub type I18NDynamicResource<M = ()> = crate::core::I18NDynamicResourceValue<M>;
+pub type I18NDynamicResource = crate::core::I18NDynamicResourceValue;

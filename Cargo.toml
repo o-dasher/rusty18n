@@ -18,13 +18,11 @@ deep-struct-update = "0.1"
 derive_more = { version = "1", features = ["as_ref", "deref", "display"] }
 impl-trait-for-tuples = "0.2"
 paste = "1.0.15"
-rusty18n_macros = { path = "rusty18n_macros", version = "0.1.0" }
 structstruck = "0.5"
 
 [workspace]
 members = [
     "example",
-    "rusty18n_macros",
 ]
 
 [workspace.lints.clippy]
