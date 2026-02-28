@@ -1,7 +1,8 @@
 [package]
 name = "rusty18n"
 version = "0.2.5"
-edition = "2021"
+edition = "2024"
+rust-version = "1.85"
 
 repository = "https://github.com/o-dasher/rusty18n.git"
 description = "A simply yet efficient i18n solution for Rust."
