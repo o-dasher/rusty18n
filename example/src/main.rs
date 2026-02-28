@@ -13,8 +13,8 @@ fn main() -> rusty18n::Result<()> {
 
     t_prefix!($wah, i18n);
 
-    let response_static = wah!(greetings.waves)?;
-    let response_dynamic = wah!(calculus.answers)?.with((a, b, result));
+    let response_static = wah!(greetings.waves);
+    let response_dynamic = wah!(calculus.answers).with((a, b, result));
 
     println!("{response_static}");
     println!("{response_dynamic}");

@@ -34,7 +34,7 @@ mod fixtures {
 }
 
 #[test]
-fn reflects_sparse_locale_values_by_path() {
+fn reflects_complete_locale_values_by_path() {
     let pt = fixtures::pt::pt();
     assert_eq!(
         pt.by_path::<R>("greetings.nested")
@@ -46,8 +46,16 @@ fn reflects_sparse_locale_values_by_path() {
             .expect("translated resource should exist"),
         "Portuguese translated"
     );
-    assert!(pt.by_path::<R>("greetings.waves").is_none());
-    assert!(pt.by_path::<R>("messages.literal").is_none());
+    assert_eq!(
+        pt.by_path::<R>("greetings.waves")
+            .expect("waves should inherit from fallback"),
+        "Waves"
+    );
+    assert_eq!(
+        pt.by_path::<R>("messages.literal")
+            .expect("literal should inherit from fallback"),
+        "Fallback literal"
+    );
 }
 
 #[test]

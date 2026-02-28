@@ -1,8 +1,8 @@
 /// Defines the full struct type tree for the fallback DSL.
 ///
 /// Leaf forms:
-/// - `"text"` => `Option<R>`
-/// - `"text with {placeholders}"` => `Option<R>`
+/// - `"text"` => `R`
+/// - `"text with {placeholders}"` => `R`
 ///
 /// The DSL supports:
 /// - `field: "text"` leaves
@@ -31,8 +31,8 @@ macro_rules! i18n_define_types {
 /// field tree instead of nested macro calls in its input.
 ///
 /// Leaf semantics:
-/// - `"text"` => `Option<R>`
-/// - `"text with {placeholders}"` => `Option<R>`
+/// - `"text"` => `R`
+/// - `"text with {placeholders}"` => `R`
 #[doc(hidden)]
 #[macro_export]
 macro_rules! i18n_define_type_fields {
@@ -55,7 +55,7 @@ macro_rules! i18n_define_type_fields {
             [$callback $($ctx)*]
             [
                 $($out)*
-                pub $field: Option<$crate::__i18n_resource_type!($crate, $lit)>,
+                pub $field: $crate::__i18n_resource_type!($crate, $lit),
             ]
             $($($rest)*)?
         );
@@ -111,7 +111,7 @@ macro_rules! i18n_define_type_fields {
 /// - `field: "text"` for static resources
 /// - `field: "text with {placeholders}"` for inferred dynamic resources
 ///
-/// Leaves become `Some(resource)` and nested blocks recurse into the already-typed
+/// Leaves become concrete resources and nested blocks recurse into the already-typed
 /// field value so `deep-struct-update` can infer the right nested type.
 #[doc(hidden)]
 #[macro_export]
@@ -144,7 +144,7 @@ macro_rules! i18n_build_value {
             @collect [$base]
             [
                 $($fields)*
-                $field: Some($crate::__i18n_build_resource!($crate, $lit)),
+                $field: $crate::__i18n_build_resource!($crate, $lit),
             ]
             $($($rest)*)?
         )
@@ -190,10 +190,10 @@ macro_rules! define_i18n_fallback {
     };
 }
 
-/// Defines a sparse locale constructor by applying DSL overrides over defaults.
+/// Defines a locale constructor by applying DSL overrides over the fallback value.
 ///
-/// Fields not explicitly overridden remain `None` and are resolved through
-/// runtime fallback in `I18NAccess::acquire`.
+/// Fields not explicitly overridden inherit the fallback resource, so every
+/// generated locale value is complete and resource lookups are infallible.
 ///
 /// Override forms:
 /// - `field: { ... }`
@@ -215,7 +215,7 @@ macro_rules! define_i18n {
         ::paste::paste! {
             pub fn [<$locale_key:lower>]() -> $base_i18n::Value {
                 $crate::i18n_build_value!(
-                    <$base_i18n::Value as ::core::default::Default>::default();
+                    <$base_i18n::Value as $crate::I18NFallback>::fallback();
                     $($body)*
                 )
             }
@@ -286,13 +286,13 @@ macro_rules! define_i18n_locales {
     };
 }
 
-/// Defines a local accessor macro bound to a specific `I18NAccess` value.
+/// Defines a local accessor macro bound to a specific resolved locale value.
 #[macro_export]
 macro_rules! t_prefix {
     ($dollar:tt$name:ident, $prefix_var:ident $(. $prefix_access:tt)*) => {
         macro_rules! $name {
             ($dollar($access:tt).*) => (
-                $prefix_var.acquire(|v| v$(. $prefix_access)* $dollar(. $access)*.as_ref())
+                &$prefix_var$(. $prefix_access)* $dollar(. $access)*
             )
         }
     };
@@ -306,10 +306,10 @@ macro_rules! t_prefix {
     };
 }
 
-/// Reads a translation value from an `I18NAccess` expression.
+/// Reads a translation value from a resolved locale expression.
 #[macro_export]
 macro_rules! t {
     ($var:ident.$($access:tt).*) => {
-        $var.acquire(|v| v.$($access).*.as_ref())
+        &$var.$($access).*
     };
 }

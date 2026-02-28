@@ -1,4 +1,4 @@
-use super::{I18NAccess, I18NFallback, I18NStore, I18NTrait, Result};
+use super::{I18NFallback, I18NStore, I18NTrait, Result};
 use std::{collections::HashMap, hash::Hash};
 
 /// A locale constructor used by the dynamic wrapper.
@@ -71,11 +71,11 @@ where
             .extend(self.loaders.iter().map(|(&locale, &load)| (locale, load())));
     }
 
-    /// Creates an access wrapper for the requested locale.
+    /// Returns the resolved locale value for the requested key.
     ///
     /// # Errors
     /// Returns [`crate::Error::MissingFallbackLocale`] when the default locale entry is absent.
-    pub fn get(&self, locale: K) -> Result<I18NAccess<'_, Self>> {
-        self.loaded.access(locale)
+    pub fn get(&self, locale: K) -> Result<&V> {
+        self.loaded.get(locale)
     }
 }

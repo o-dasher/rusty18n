@@ -1,6 +1,6 @@
-use super::{I18NAccess, I18NFallback, I18NTrait, Result};
+use super::{I18NFallback, I18NTrait, Result};
 use derive_more::derive::{Deref, DerefMut, From};
-use std::{collections::HashMap, hash::Hash};
+use std::{collections::HashMap, hash::Hash, ops::Deref};
 
 /// The `I18NStore` wraps a `HashMap` that maps key value pairs of `Locale` keys and localized
 /// implementations.
@@ -30,27 +30,19 @@ impl<K: Eq + Hash + Default + Copy, V: I18NFallback> I18NStore<K, V> {
         store
     }
 
-    fn resolve(&self, locale: K) -> Result<(&V, &V)> {
-        self.0
+    fn resolve(&self, locale: K) -> Result<&V> {
+        self.deref()
             .get(&K::default())
             .ok_or(crate::Error::MissingFallbackLocale)
-            .map(|fallback| (fallback, self.0.get(&locale).unwrap_or(fallback)))
+            .map(|fallback| self.deref().get(&locale).unwrap_or(fallback))
     }
 
-    pub(crate) fn access<L>(&self, locale: K) -> Result<I18NAccess<'_, L>>
-    where
-        L: I18NTrait<K = K, V = V>,
-    {
-        self.resolve(locale)
-            .map(|(fallback, to)| I18NAccess { fallback, to })
-    }
-
-    /// Creates an access wrapper for the requested locale.
+    /// Returns the resolved locale value for the requested key.
     ///
     /// # Errors
     /// Returns [`crate::Error::MissingFallbackLocale`] when the default locale entry is absent.
-    pub fn get(&self, locale: K) -> Result<I18NAccess<'_, Self>> {
-        self.access(locale)
+    pub fn get(&self, locale: K) -> Result<&V> {
+        self.resolve(locale)
     }
 
     /// Unloads a single locale value from the store.

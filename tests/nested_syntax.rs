@@ -32,12 +32,12 @@ fn supports_nested_blocks() -> rusty18n::Result<()> {
     let locales = I18NUsage::locales();
 
     let en = locales.get(I18NUsage::Key::en)?;
-    assert_eq!(rusty18n::t!(en.greetings.waves)?, "Waves");
-    assert_eq!(rusty18n::t!(en.greetings.oi.a)?, "English nested");
+    assert_eq!(rusty18n::t!(en.greetings.waves), "Waves");
+    assert_eq!(rusty18n::t!(en.greetings.oi.a), "English nested");
 
     let pt = locales.get(I18NUsage::Key::pt)?;
-    assert_eq!(rusty18n::t!(pt.greetings.waves)?, "Waves");
-    assert_eq!(rusty18n::t!(pt.greetings.oi.a)?, "Portuguese nested");
+    assert_eq!(rusty18n::t!(pt.greetings.waves), "Waves");
+    assert_eq!(rusty18n::t!(pt.greetings.oi.a), "Portuguese nested");
 
     Ok(())
 }
