@@ -95,9 +95,9 @@ impl<M> I18NDynamicResourceValue<M> {
     where
         T: IntoDynamicResourceArgs<Marker = M>,
     {
-        let args = args.into_dynamic_resource_args();
-
-        self.render.unwrap_or(|_, _| String::new())(&args, None)
+        self.render.map_or_else(String::new, |render| {
+            render(&args.into_dynamic_resource_args(), None)
+        })
     }
 }
 
@@ -143,12 +143,10 @@ impl<K: Eq + Hash + Copy, V> std::iter::FromIterator<(K, V)> for I18NStore<K, V>
 }
 
 impl<K: Eq + Hash + Default + Copy, V: I18NFallback> I18NStore<K, V> {
-    fn ensure_fallback(&mut self) {
-        self.entry(K::default()).or_insert_with(V::fallback);
-    }
-
-    fn fallback_ref(&self) -> Result<&V> {
-        self.get(&K::default()).ok_or(Error::MissingFallbackLocale)
+    fn resolve(&self, locale: K) -> Result<(&V, &V)> {
+        self.get(&K::default())
+            .ok_or(Error::MissingFallbackLocale)
+            .map(|fallback| (fallback, self.get(&locale).unwrap_or(fallback)))
     }
 
     fn unload_locale(&mut self, locale: K) -> Option<V> {
@@ -162,7 +160,6 @@ impl<K: Eq + Hash + Default + Copy, V: I18NFallback> I18NStore<K, V> {
     fn unload_all_locales(&mut self) {
         let default_locale = K::default();
         self.retain(|locale, _| *locale == default_locale);
-        self.ensure_fallback();
     }
 }
 
@@ -224,7 +221,7 @@ where
     #[must_use]
     pub fn new(store: Vec<(K, V)>) -> Self {
         let mut store: I18NStore<K, V> = store.into_iter().collect();
-        store.ensure_fallback();
+        store.entry(K::default()).or_insert_with(V::fallback);
         Self { store }
     }
 
@@ -263,10 +260,9 @@ where
     /// # Errors
     /// Returns [`Error::MissingFallbackLocale`] when the default locale entry is absent.
     pub fn get(&self, locale: K) -> Result<I18NAccess<'_, Self>> {
-        let fallback = self.store.fallback_ref()?;
-        let to = self.store.get(&locale).unwrap_or(fallback);
-
-        Ok(I18NAccess { fallback, to })
+        self.store
+            .resolve(locale)
+            .map(|(fallback, to)| I18NAccess { fallback, to })
     }
 }
 
@@ -346,25 +342,17 @@ where
     ///
     #[must_use]
     pub fn load(&mut self, locale: K) -> bool {
-        let Some(load) = self.loaders.get(&locale).copied() else {
-            return false;
-        };
-
-        self.loaded.insert(locale, load());
-        true
+        self.loaders
+            .get(&locale)
+            .copied()
+            .map(|load| self.loaded.insert(locale, load()))
+            .is_some()
     }
 
     /// Loads all registered locales into memory.
     pub fn load_all(&mut self) {
-        let loaders = self
-            .loaders
-            .iter()
-            .map(|(&locale, &load)| (locale, load))
-            .collect::<Vec<_>>();
-
-        for (locale, load) in loaders {
-            self.loaded.insert(locale, load());
-        }
+        self.loaded
+            .extend(self.loaders.iter().map(|(&locale, &load)| (locale, load())));
     }
 
     /// Unloads a single locale from memory.
@@ -401,9 +389,8 @@ where
     /// # Errors
     /// Returns [`Error::MissingFallbackLocale`] when the default locale entry is absent.
     pub fn get(&self, locale: K) -> Result<I18NAccess<'_, Self>> {
-        let fallback = self.loaded.fallback_ref()?;
-        let to = self.loaded.get(&locale).unwrap_or(fallback);
-
-        Ok(I18NAccess { fallback, to })
+        self.loaded
+            .resolve(locale)
+            .map(|(fallback, to)| I18NAccess { fallback, to })
     }
 }
