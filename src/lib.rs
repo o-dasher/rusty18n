@@ -16,7 +16,7 @@ pub use structstruck::strike as __structstruck_strike;
 /// Default generated i18n resource type.
 ///
 /// It stores a compile-time validated template and supports inferred positional
-/// rendering through `.with((...))`.
+/// rendering through `.with(&[...])`.
 /// Plain strings and strings with `{placeholders}` both use this type.
 pub type R = I18NDynamicResource;
 

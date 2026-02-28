@@ -21,10 +21,13 @@ macro_rules! __i18n_build_resource {
     ($lit:literal) => {{
         static DISPLAY_TEXT: ::std::sync::OnceLock<::std::boxed::Box<str>> =
             ::std::sync::OnceLock::new();
+        static RENDER_PLAN: ::std::sync::OnceLock<::std::boxed::Box<[$crate::I18NRenderPart]>> =
+            ::std::sync::OnceLock::new();
+        const HAS_ESCAPES: bool = $crate::__template_has_escapes($lit);
         const _: usize = $crate::__template_arity($lit);
 
         $crate::I18NDynamicResourceValue::new_static(
-            if $crate::__template_has_escapes($lit) {
+            if HAS_ESCAPES {
                 DISPLAY_TEXT
                     .get_or_init(|| $crate::__normalize_template($lit).into_boxed_str())
                     .as_ref()
@@ -32,6 +35,9 @@ macro_rules! __i18n_build_resource {
                 $lit
             },
             $lit,
+            RENDER_PLAN
+                .get_or_init(|| $crate::__build_render_plan($lit))
+                .as_ref(),
         )
     }};
 }

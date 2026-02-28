@@ -31,15 +31,15 @@ fn infers_placeholders_and_handles_escaped_braces() {
     let en = locales.get(I18NUsage::Key::en);
 
     assert_eq!(
-        rusty18n::t!(en.messages.inferred).with((1, 2, 3)),
+        rusty18n::t!(en.messages.inferred).with(&["1", "2", "3"]),
         "This is 1, 2, 3"
     );
     assert_eq!(
-        rusty18n::t!(en.messages.repeated).with(("echo",)),
+        rusty18n::t!(en.messages.repeated).with(&["echo"]),
         "echo + echo"
     );
     assert_eq!(
-        rusty18n::t!(en.messages.escaped).with(("value",)),
+        rusty18n::t!(en.messages.escaped).with(&["value"]),
         "Curly {brace} and value"
     );
     assert_eq!(rusty18n::t!(en.messages.literal), "Just {braces}");
@@ -51,7 +51,7 @@ fn infers_placeholder_order_from_first_appearance() {
     let pt = locales.get(I18NUsage::Key::pt);
 
     assert_eq!(
-        rusty18n::t!(pt.messages.inferred).with(("C", "A", "B")),
+        rusty18n::t!(pt.messages.inferred).with(&["C", "A", "B"]),
         "C depois A depois B"
     );
 }

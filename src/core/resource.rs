@@ -1,29 +1,7 @@
 #[cfg(feature = "bevy_reflect")]
 use bevy_reflect::Reflect;
 use derive_more::derive::{AsRef, Deref, Display as DeriveDisplay};
-use impl_trait_for_tuples::impl_for_tuples;
 use std::fmt::Display;
-
-/// Converts user-provided dynamic arguments into positional `String`s.
-///
-/// This enables ergonomic calls such as:
-/// `dynamic.with((1, "name", 3.5))`
-/// for resources that internally render templates such as:
-/// `"Hello {name}, total {count}"`.
-pub trait IntoDynamicResourceArgs {
-    /// Converts `self` into the positional arguments expected by the dynamic resource.
-    fn into_dynamic_resource_args(self) -> Vec<String>;
-}
-
-#[impl_for_tuples(0, 16)]
-#[tuple_types_no_default_trait_bound]
-impl IntoDynamicResourceArgs for Tuple {
-    for_tuples!( where #( Tuple: Display )* );
-
-    fn into_dynamic_resource_args(self) -> Vec<String> {
-        Vec::from([for_tuples!( #( self.Tuple.to_string() ),* )])
-    }
-}
 
 #[doc(hidden)]
 #[must_use]
@@ -231,29 +209,48 @@ fn placeholder_end_runtime(bytes: &[u8], start: usize) -> Option<usize> {
     (index < bytes.len() && bytes[index] == b'}').then_some(index)
 }
 
-fn render_template(template: &str, args: &[String]) -> String {
+#[derive(Debug)]
+#[doc(hidden)]
+pub enum I18NRenderPart {
+    Literal(Box<str>),
+    Argument(usize),
+}
+
+fn push_literal(parts: &mut Vec<I18NRenderPart>, literal: &mut String) {
+    if !literal.is_empty() {
+        parts.push(I18NRenderPart::Literal(
+            std::mem::take(literal).into_boxed_str(),
+        ));
+    }
+}
+
+#[doc(hidden)]
+#[must_use]
+pub fn __build_render_plan(template: &str) -> Box<[I18NRenderPart]> {
     let bytes = template.as_bytes();
-    let mut output = String::with_capacity(template.len());
-    let mut placeholders = Vec::with_capacity(args.len());
+    let mut parts = Vec::new();
+    let mut literal = String::with_capacity(template.len());
+    let mut placeholders = Vec::new();
     let mut index = 0;
 
     while index < bytes.len() {
         match bytes[index] {
             b'{' if index + 1 < bytes.len() && bytes[index + 1] == b'{' => {
-                output.push('{');
+                literal.push('{');
                 index += 2;
             }
             b'}' if index + 1 < bytes.len() && bytes[index + 1] == b'}' => {
-                output.push('}');
+                literal.push('}');
                 index += 2;
             }
             b'{' => {
                 let Some(name_end) = placeholder_end_runtime(bytes, index + 1) else {
-                    output.push('{');
+                    literal.push('{');
                     index += 1;
                     continue;
                 };
                 let name = &template[index + 1..name_end];
+                push_literal(&mut parts, &mut literal);
                 let render_index = placeholders
                     .iter()
                     .position(|candidate| *candidate == name)
@@ -262,24 +259,18 @@ fn render_template(template: &str, args: &[String]) -> String {
                         placeholders.push(name);
                         current
                     });
-
-                if let Some(value) = args.get(render_index) {
-                    output.push_str(value.as_str());
-                } else {
-                    output.push('{');
-                    output.push_str(name);
-                    output.push('}');
-                }
+                parts.push(I18NRenderPart::Argument(render_index));
                 index = name_end + 1;
             }
             _ => {
-                output.push(bytes[index] as char);
+                literal.push(bytes[index] as char);
                 index += 1;
             }
         }
     }
 
-    output
+    push_literal(&mut parts, &mut literal);
+    parts.into_boxed_slice()
 }
 
 /// A struct representing an internationalization (i18n) dynamic resource.
@@ -295,33 +286,53 @@ pub struct I18NDynamicResourceValue {
     #[as_ref(forward)]
     #[deref(forward)]
     display_text: &'static str,
+    #[cfg_attr(feature = "bevy_reflect", reflect(ignore))]
+    render_plan: &'static [I18NRenderPart],
 }
 
 impl I18NDynamicResourceValue {
     #[doc(hidden)]
     #[must_use]
-    pub const fn new_static(display_text: &'static str, template: &'static str) -> Self {
+    pub const fn new_static(
+        display_text: &'static str,
+        template: &'static str,
+        render_plan: &'static [I18NRenderPart],
+    ) -> Self {
         Self {
             template,
             display_text,
+            render_plan,
         }
     }
 
     /// Invokes the dynamic resource with user-provided arguments.
     ///
     /// # Arguments
-    /// * `args` - Arguments that can be converted into positional strings.
-    ///   Each tuple item must implement `Display`.
+    /// * `args` - Positional arguments for the inferred placeholders.
+    ///   Each item is rendered through `ToString`.
     ///
     /// # Returns
     /// A string representing the localized resource.
     ///
     #[must_use]
-    pub fn with<T>(&self, args: T) -> String
+    pub fn with<S, const N: usize>(&self, args: &[S; N]) -> String
     where
-        T: IntoDynamicResourceArgs,
+        S: Display,
     {
-        render_template(self.template, &args.into_dynamic_resource_args())
+        let mut output = String::with_capacity(self.display_text.len());
+
+        for part in self.render_plan {
+            match part {
+                I18NRenderPart::Literal(text) => output.push_str(text),
+                I18NRenderPart::Argument(index) => {
+                    if let Some(value) = args.get(*index) {
+                        output.push_str(&value.to_string());
+                    }
+                }
+            }
+        }
+
+        output
     }
 }
 
