@@ -23,7 +23,9 @@ mod fixtures {
     }
 }
 
-fn inferred_text(locale: &I18NUsage::Value) -> String {
+fn inferred_text(
+    locale: &rusty18n::I18NResolved<'_, I18NUsage::Value, I18NUsage::Override>,
+) -> String {
     rusty18n::t!(locale.messages.inferred).with(("C", "A", "B"))
 }
 
@@ -70,13 +72,13 @@ fn loads_and_unloads_locales_on_demand() {
 fn shares_access_behavior_between_wrappers() {
     let eager = I18NUsage::locales();
     let eager_pt = eager.get(I18NUsage::Key::pt);
-    assert_eq!(inferred_text(eager_pt), "C depois A depois B");
+    assert_eq!(inferred_text(&eager_pt), "C depois A depois B");
 
     let mut dynamic = I18NUsage::locales_dynamic();
     let dynamic_pt = dynamic.get(I18NUsage::Key::pt);
-    assert_eq!(inferred_text(dynamic_pt), "This is C, A, B");
+    assert_eq!(inferred_text(&dynamic_pt), "This is C, A, B");
 
     assert!(dynamic.load(I18NUsage::Key::pt));
     let dynamic_pt = dynamic.get(I18NUsage::Key::pt);
-    assert_eq!(inferred_text(dynamic_pt), "C depois A depois B");
+    assert_eq!(inferred_text(&dynamic_pt), "C depois A depois B");
 }

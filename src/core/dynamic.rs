@@ -1,22 +1,22 @@
-use super::{I18NFallback, I18NStore, I18NTrait};
+use super::{I18NFallback, I18NResolved, I18NStore, I18NTrait};
 use std::{collections::HashMap, hash::Hash};
 
 /// A locale constructor used by the dynamic wrapper.
-pub type I18NLocaleLoader<V> = fn() -> V;
+pub type I18NLocaleLoader<O> = fn() -> O;
 
 /// Dynamically loaded i18n resources.
 #[derive(Debug)]
-pub struct I18NDynamicWrapper<K: Eq + Hash + Default + Copy, V: I18NFallback> {
-    pub loaded: I18NStore<K, V>,
-    pub loaders: HashMap<K, I18NLocaleLoader<V>>,
+pub struct I18NDynamicWrapper<K: Eq + Hash + Default + Copy, V: I18NFallback, O> {
+    pub loaded: I18NStore<K, V, O>,
+    pub loaders: HashMap<K, I18NLocaleLoader<O>>,
 }
 
-impl<K: Eq + Hash + Default + Copy, V: I18NFallback> I18NTrait for I18NDynamicWrapper<K, V> {
+impl<K: Eq + Hash + Default + Copy, V: I18NFallback, O> I18NTrait for I18NDynamicWrapper<K, V, O> {
     type K = K;
     type V = V;
 }
 
-impl<K: Eq + Hash + Default + Copy, V: I18NFallback> I18NDynamicWrapper<K, V>
+impl<K: Eq + Hash + Default + Copy, V: I18NFallback, O> I18NDynamicWrapper<K, V, O>
 where
     Self: I18NTrait<K = K, V = V>,
 {
@@ -29,11 +29,11 @@ where
     /// A new `I18NDynamicWrapper` instance with the fallback locale preloaded.
     ///
     #[must_use]
-    pub fn new(loaders: Vec<(K, I18NLocaleLoader<V>)>) -> Self {
+    pub fn new(fallback: V, loaders: Vec<(K, I18NLocaleLoader<O>)>) -> Self {
         let default_locale = K::default();
 
         Self {
-            loaded: I18NStore::new(std::iter::empty::<(K, V)>()),
+            loaded: I18NStore::new(fallback, std::iter::empty::<(K, O)>()),
             loaders: loaders
                 .into_iter()
                 .filter(|(locale, _)| *locale != default_locale)
@@ -48,7 +48,7 @@ where
     ///
     /// # Returns
     /// The previously registered loader for the locale, if any.
-    pub fn unregister_locale(&mut self, locale: K) -> Option<I18NLocaleLoader<V>> {
+    pub fn unregister_locale(&mut self, locale: K) -> Option<I18NLocaleLoader<O>> {
         self.loaders.remove(&locale).inspect(|_| {
             self.loaded.unload(locale);
         })
@@ -78,9 +78,9 @@ where
             .extend(self.loaders.iter().map(|(&locale, &load)| (locale, load())));
     }
 
-    /// Returns the resolved locale value for the requested key.
+    /// Returns the resolved locale view for the requested key.
     #[must_use]
-    pub fn get(&self, locale: K) -> &V {
+    pub fn get(&self, locale: K) -> I18NResolved<'_, V, O> {
         self.loaded.get(locale)
     }
 }

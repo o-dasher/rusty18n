@@ -1,6 +1,7 @@
 #![cfg(feature = "bevy_reflect")]
 
 use crate::fixtures::I18NUsage;
+use bevy_reflect::GetPath;
 use rusty18n::{I18NReflected, R};
 
 mod fixtures {
@@ -37,24 +38,30 @@ mod fixtures {
 fn reflects_complete_locale_values_by_path() {
     let pt = fixtures::pt::pt();
     assert_eq!(
-        pt.by_path::<R>("greetings.nested")
+        pt.path::<Option<R>>("greetings.nested")
+            .ok()
+            .and_then(Option::as_ref)
             .expect("nested resource should exist"),
         "Portuguese nested"
     );
     assert_eq!(
-        pt.by_path::<R>("messages.translated")
+        pt.path::<Option<R>>("messages.translated")
+            .ok()
+            .and_then(Option::as_ref)
             .expect("translated resource should exist"),
         "Portuguese translated"
     );
     assert_eq!(
-        pt.by_path::<R>("greetings.waves")
-            .expect("waves should inherit from fallback"),
-        "Waves"
+        pt.path::<Option<R>>("greetings.waves")
+            .ok()
+            .and_then(Option::as_ref),
+        None
     );
     assert_eq!(
-        pt.by_path::<R>("messages.literal")
-            .expect("literal should inherit from fallback"),
-        "Fallback literal"
+        pt.path::<Option<R>>("messages.literal")
+            .ok()
+            .and_then(Option::as_ref),
+        None
     );
 }
 

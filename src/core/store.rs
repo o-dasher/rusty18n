@@ -1,4 +1,4 @@
-use super::{I18NFallback, I18NTrait};
+use super::{I18NFallback, I18NResolved, I18NTrait};
 use std::{collections::HashMap, hash::Hash};
 
 /// The `I18NStore` always keeps the fallback locale resident.
@@ -6,51 +6,40 @@ use std::{collections::HashMap, hash::Hash};
 /// Non-default locales are stored in `locales`; the fallback value is kept in its
 /// own slot so the missing-fallback state is not representable.
 #[derive(Debug)]
-pub struct I18NStore<K: Eq + Hash + Copy, V> {
+pub struct I18NStore<K: Eq + Hash + Copy, V, O> {
     fallback: V,
-    pub(crate) locales: HashMap<K, V>,
+    pub(crate) locales: HashMap<K, O>,
 }
 
-impl<K: Eq + Hash + Default + Copy, V: I18NFallback> std::iter::FromIterator<(K, V)>
-    for I18NStore<K, V>
-{
-    fn from_iter<T: IntoIterator<Item = (K, V)>>(iter: T) -> Self {
-        let default_locale = K::default();
-        let mut fallback = None;
-        let mut locales = HashMap::new();
-
-        for (locale, value) in iter {
-            if locale == default_locale {
-                fallback = Some(value);
-            } else {
-                locales.extend(std::iter::once((locale, value)));
-            }
-        }
-
-        Self {
-            fallback: fallback.unwrap_or_else(V::fallback),
-            locales,
-        }
-    }
-}
-
-impl<K: Eq + Hash + Default + Copy, V: I18NFallback> I18NTrait for I18NStore<K, V> {
+impl<K: Eq + Hash + Default + Copy, V: I18NFallback, O> I18NTrait for I18NStore<K, V, O> {
     type K = K;
     type V = V;
 }
 
-impl<K: Eq + Hash + Default + Copy, V: I18NFallback> I18NStore<K, V> {
-    /// Constructs a locale store and ensures the fallback locale is present.
-    pub fn new<T>(locales: T) -> Self
+impl<K: Eq + Hash + Default + Copy, V, O> I18NStore<K, V, O> {
+    /// Constructs a locale store from a fallback value and sparse locale overrides.
+    pub fn new<T>(fallback: V, locales: T) -> Self
     where
-        T: IntoIterator<Item = (K, V)>,
+        T: IntoIterator<Item = (K, O)>,
     {
-        locales.into_iter().collect()
+        let default_locale = K::default();
+
+        Self {
+            fallback,
+            locales: locales
+                .into_iter()
+                .filter(|(locale, _)| *locale != default_locale)
+                .collect(),
+        }
     }
 
-    /// Returns the resolved locale value for the requested key.
-    pub fn get(&self, locale: K) -> &V {
-        self.locales.get(&locale).unwrap_or(&self.fallback)
+    /// Returns the resolved locale view for the requested key.
+    #[must_use]
+    pub fn get(&self, locale: K) -> I18NResolved<'_, V, O> {
+        I18NResolved {
+            fallback: &self.fallback,
+            override_locale: self.locales.get(&locale),
+        }
     }
 
     /// Returns whether the locale is currently present in the store.
@@ -62,7 +51,7 @@ impl<K: Eq + Hash + Default + Copy, V: I18NFallback> I18NStore<K, V> {
     ///
     /// The default fallback locale is never stored in the loaded map, so removing
     /// it naturally returns `None`.
-    pub fn unload(&mut self, locale: K) -> Option<V> {
+    pub fn unload(&mut self, locale: K) -> Option<O> {
         self.locales.remove(&locale)
     }
 

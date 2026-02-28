@@ -1,27 +1,47 @@
 /// Defines the full struct type tree for the fallback DSL.
 ///
 /// Leaf forms:
-/// - `"text"` => `R`
-/// - `"text with {placeholders}"` => `R`
+/// - `"text"` => fallback `R`, override `Option<R>`
+/// - `"text with {placeholders}"` => fallback `R`, override `Option<R>`
 ///
 /// The DSL supports:
 /// - `field: "text"` leaves
 /// - `field: { ... }` nested blocks
 #[doc(hidden)]
 #[macro_export]
-#[cfg(feature = "bevy_reflect")]
 macro_rules! i18n_define_types {
     ($type_name:ident { $($body:tt)* }) => {
-        $crate::i18n_define_type_fields!(@parse [finish_reflect $type_name] [] $($body)*);
+        $crate::i18n_define_type_fields!(@parse [finish $type_name] [] [] $($body)*);
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+#[cfg(feature = "bevy_reflect")]
+macro_rules! i18n_define_struct {
+    ($type_name:ident { $($fields:tt)* }) => {
+        $crate::__structstruck_strike! {
+            #[structstruck::each[derive(Debug, Default, $crate::Reflect)]]
+            #[structstruck::each[structstruck::long_names]]
+            pub struct $type_name {
+                $($fields)*
+            }
+        }
     };
 }
 
 #[doc(hidden)]
 #[macro_export]
 #[cfg(not(feature = "bevy_reflect"))]
-macro_rules! i18n_define_types {
-    ($type_name:ident { $($body:tt)* }) => {
-        $crate::i18n_define_type_fields!(@parse [finish_plain $type_name] [] $($body)*);
+macro_rules! i18n_define_struct {
+    ($type_name:ident { $($fields:tt)* }) => {
+        $crate::__structstruck_strike! {
+            #[structstruck::each[derive(Debug, Default)]]
+            #[structstruck::each[structstruck::long_names]]
+            pub struct $type_name {
+                $($fields)*
+            }
+        }
     };
 }
 
@@ -31,74 +51,66 @@ macro_rules! i18n_define_types {
 /// field tree instead of nested macro calls in its input.
 ///
 /// Leaf semantics:
-/// - `"text"` => `R`
-/// - `"text with {placeholders}"` => `R`
+/// - fallback leaf: `R`
+/// - override leaf: `Option<R>`
 #[doc(hidden)]
 #[macro_export]
 macro_rules! i18n_define_type_fields {
-    (@parse [$callback:ident $($ctx:tt)*] [$($out:tt)*]) => {
-        $crate::i18n_define_type_fields!(@$callback $($ctx)* [$($out)*]);
+    (@parse [$callback:ident $($ctx:tt)*] [$($value_out:tt)*] [$($override_out:tt)*]) => {
+        $crate::i18n_define_type_fields!(@$callback $($ctx)* [$($value_out)*] [$($override_out)*]);
     };
 
-    (@parse [$callback:ident $($ctx:tt)*] [$($out:tt)*] $field:ident : { $($nested:tt)* } $(, $($rest:tt)*)?) => {
+    (@parse [$callback:ident $($ctx:tt)*] [$($value_out:tt)*] [$($override_out:tt)*] $field:ident : { $($nested:tt)* } $(, $($rest:tt)*)?) => {
         $crate::i18n_define_type_fields!(
             @parse
-            [finish_nested [$callback $($ctx)*] [$($out)*] $field [$($($rest)*)?]]
+            [finish_nested [$callback $($ctx)*] [$($value_out)*] [$($override_out)*] $field [$($($rest)*)?]]
+            []
             []
             $($nested)*
         );
     };
 
-    (@parse [$callback:ident $($ctx:tt)*] [$($out:tt)*] $field:ident : $lit:literal $(, $($rest:tt)*)?) => {
+    (@parse [$callback:ident $($ctx:tt)*] [$($value_out:tt)*] [$($override_out:tt)*] $field:ident : $lit:literal $(, $($rest:tt)*)?) => {
         $crate::i18n_define_type_fields!(
             @parse
             [$callback $($ctx)*]
             [
-                $($out)*
+                $($value_out)*
                 pub $field: $crate::__i18n_resource_type!($crate, $lit),
+            ]
+            [
+                $($override_out)*
+                pub $field: Option<$crate::__i18n_resource_type!($crate, $lit)>,
             ]
             $($($rest)*)?
         );
     };
 
-    (@finish_nested [$callback:ident $($ctx:tt)*] [$($outer_out:tt)*] $field:ident [$($rest:tt)*] [$($nested_out:tt)*]) => {
+    (@finish_nested [$callback:ident $($ctx:tt)*] [$($outer_value_out:tt)*] [$($outer_override_out:tt)*] $field:ident [$($rest:tt)*] [$($nested_value_out:tt)*] [$($nested_override_out:tt)*]) => {
         $crate::i18n_define_type_fields!(
             @parse
             [$callback $($ctx)*]
             [
-                $($outer_out)*
+                $($outer_value_out)*
                 pub $field: struct {
-                    $($nested_out)*
+                    $($nested_value_out)*
+                },
+            ]
+            [
+                $($outer_override_out)*
+                pub $field: struct {
+                    $($nested_override_out)*
                 },
             ]
             $($rest)*
         );
     };
 
-    (@finish_plain $type_name:ident [$($fields:tt)*]) => {
+    (@finish $type_name:ident [$($value_fields:tt)*] [$($override_fields:tt)*]) => {
         ::paste::paste! {
             pub mod [<$type_name:snake>] {
-                $crate::__structstruck_strike! {
-                    #[structstruck::each[derive(Debug, Default)]]
-                    #[structstruck::each[structstruck::long_names]]
-                    pub struct $type_name {
-                        $($fields)*
-                    }
-                }
-            }
-        }
-    };
-
-    (@finish_reflect $type_name:ident [$($fields:tt)*]) => {
-        ::paste::paste! {
-            pub mod [<$type_name:snake>] {
-                $crate::__structstruck_strike! {
-                    #[structstruck::each[derive(Debug, Default, $crate::Reflect)]]
-                    #[structstruck::each[structstruck::long_names]]
-                    pub struct $type_name {
-                        $($fields)*
-                    }
-                }
+                $crate::i18n_define_struct!($type_name { $($value_fields)* });
+                $crate::i18n_define_struct!([<$type_name Overrides>] { $($override_fields)* });
             }
         }
     };
@@ -151,6 +163,47 @@ macro_rules! i18n_build_value {
     };
 }
 
+/// Builds a sparse override value from the DSL.
+///
+/// Leaves become `Some(resource)` while omitted fields stay `None`.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! i18n_build_override {
+    ($base:expr; $($body:tt)*) => {
+        $crate::i18n_build_override!(@collect [$base] [] $($body)*)
+    };
+
+    (@collect [$base:expr] [$($fields:tt)*]) => {
+        $crate::__deep_update! {
+            $($fields)*
+            ..$base
+        }
+    };
+
+    (@collect [$base:expr] [$($fields:tt)*] $field:ident : { $($nested:tt)* } $(, $($rest:tt)*)?) => {
+        $crate::i18n_build_override!(
+            @collect
+            [$base]
+            [
+                $($fields)*
+                $field: $crate::i18n_build_override!(($base).$field; $($nested)*),
+            ]
+            $($($rest)*)?
+        )
+    };
+
+    (@collect [$base:expr] [$($fields:tt)*] $field:ident : $lit:literal $(, $($rest:tt)*)?) => {
+        $crate::i18n_build_override!(
+            @collect [$base]
+            [
+                $($fields)*
+                $field: Some($crate::__i18n_build_resource!($crate, $lit)),
+            ]
+            $($($rest)*)?
+        )
+    };
+}
+
 /// Defines the canonical fallback i18n schema and values from a single DSL source.
 ///
 /// DSL forms:
@@ -190,10 +243,10 @@ macro_rules! define_i18n_fallback {
     };
 }
 
-/// Defines a locale constructor by applying DSL overrides over the fallback value.
+/// Defines a sparse locale constructor by applying DSL overrides over defaults.
 ///
-/// Fields not explicitly overridden inherit the fallback resource, so every
-/// generated locale value is complete and resource lookups are infallible.
+/// Fields not explicitly overridden stay absent in the override value and are
+/// resolved against the fallback locale at access time.
 ///
 /// Override forms:
 /// - `field: { ... }`
@@ -204,7 +257,7 @@ macro_rules! define_i18n_fallback {
 /// - `define_i18n! { I18NUsage => pt ... }`
 ///
 /// It generates:
-/// - `pub fn <locale_key_lower>() -> I18NUsage::Value`
+/// - `pub fn <locale_key_lower>() -> I18NUsage::Override`
 #[macro_export]
 macro_rules! define_i18n {
     (
@@ -213,9 +266,9 @@ macro_rules! define_i18n {
         $($body:tt)*
     ) => {
         ::paste::paste! {
-            pub fn [<$locale_key:lower>]() -> $base_i18n::Value {
-                $crate::i18n_build_value!(
-                    <$base_i18n::Value as $crate::I18NFallback>::fallback();
+            pub fn [<$locale_key:lower>]() -> $base_i18n::Override {
+                $crate::i18n_build_override!(
+                    <$base_i18n::Override as ::core::default::Default>::default();
                     $($body)*
                 )
             }
@@ -239,9 +292,10 @@ macro_rules! define_i18n {
 /// It generates a namespace module:
 /// - `pub mod I18NUsage { ... }`
 /// - `pub type I18NUsage::Value = <default_locale_type>`
+/// - `pub type I18NUsage::Override = <default_locale_override_type>`
 /// - `pub enum I18NUsage::Key { en, pt, ... }`
-/// - `pub fn I18NUsage::locales() -> I18NStore<I18NUsage::Key, I18NUsage::Value>`
-/// - `pub fn I18NUsage::locales_dynamic() -> I18NDynamicWrapper<I18NUsage::Key, I18NUsage::Value>`
+/// - `pub fn I18NUsage::locales() -> I18NStore<I18NUsage::Key, I18NUsage::Value, I18NUsage::Override>`
+/// - `pub fn I18NUsage::locales_dynamic() -> I18NDynamicWrapper<I18NUsage::Key, I18NUsage::Value, I18NUsage::Override>`
 #[macro_export]
 macro_rules! define_i18n_locales {
     (
@@ -253,6 +307,7 @@ macro_rules! define_i18n_locales {
             #[allow(non_snake_case)]
             pub mod $i18n_usage {
                 pub type Value = super::$default_locale_mod::[<$i18n_usage:snake>]::$i18n_usage;
+                pub type Override = super::$default_locale_mod::[<$i18n_usage:snake>]::[<$i18n_usage Overrides>];
 
                 #[allow(non_camel_case_types)]
                 #[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq)]
@@ -264,35 +319,42 @@ macro_rules! define_i18n_locales {
                     )*
                 }
 
-                pub fn locales() -> $crate::I18NStore<Key, Value> {
-                    $crate::I18NStore::new(vec![
-                        (Key::$default_locale_mod, super::$default_locale_mod::[<$default_locale_mod:snake>]() ),
+                pub fn locales() -> $crate::I18NStore<Key, Value, Override> {
+                    $crate::I18NStore::new(
+                        super::$default_locale_mod::[<$default_locale_mod:snake>](),
+                        vec![
                         $(
                             (Key::$locale_mod, super::$locale_mod::[<$locale_mod:snake>]()),
                         )*
-                    ])
+                        ],
+                    )
                 }
 
-                pub fn locales_dynamic() -> $crate::I18NDynamicWrapper<Key, Value> {
-                    $crate::I18NDynamicWrapper::new(vec![
-                        (Key::$default_locale_mod, super::$default_locale_mod::[<$default_locale_mod:snake>]),
+                pub fn locales_dynamic() -> $crate::I18NDynamicWrapper<Key, Value, Override> {
+                    $crate::I18NDynamicWrapper::new(
+                        super::$default_locale_mod::[<$default_locale_mod:snake>](),
+                        vec![
                         $(
                             (Key::$locale_mod, super::$locale_mod::[<$locale_mod:snake>]),
                         )*
-                    ])
+                        ],
+                    )
                 }
             }
         }
     };
 }
 
-/// Defines a local accessor macro bound to a specific resolved locale value.
+/// Defines a local accessor macro bound to a resolved locale view.
 #[macro_export]
 macro_rules! t_prefix {
     ($dollar:tt$name:ident, $prefix_var:ident $(. $prefix_access:tt)*) => {
         macro_rules! $name {
             ($dollar($access:tt).*) => (
-                &$prefix_var$(. $prefix_access)* $dollar(. $access)*
+                $prefix_var$(. $prefix_access)*.resolve(
+                    |v| &v $dollar(. $access)*,
+                    |o| o $dollar(. $access)*.as_ref(),
+                )
             )
         }
     };
@@ -306,10 +368,13 @@ macro_rules! t_prefix {
     };
 }
 
-/// Reads a translation value from a resolved locale expression.
+/// Reads a translation value from a resolved locale view.
 #[macro_export]
 macro_rules! t {
     ($var:ident.$($access:tt).*) => {
-        &$var.$($access).*
+        $var.resolve(
+            |v| &v.$($access).*,
+            |o| o.$($access).*.as_ref(),
+        )
     };
 }
