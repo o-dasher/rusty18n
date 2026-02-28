@@ -4,8 +4,8 @@ Rusty18n is a small in-memory i18n library for Rust with:
 
 - A single DSL source of truth for fallback schema and values
 - Sparse locale overrides
-- Runtime fallback for missing locale fields
-- Static and dynamic resources
+- Fallback resolution for omitted locale fields
+- Static string resources and explicit dynamic formatters
 
 ## Install
 
@@ -17,27 +17,30 @@ cargo add rusty18n
 
 1. Define the fallback schema with `define_i18n_fallback!`.
 2. Define each locale override with `define_i18n!`.
-3. Generate `I18NUsage::Key` + `I18NUsage::locales()` with `define_i18n_locales!`.
-4. Read values with `I18NWrapper::get` and `t_prefix!`/`t!`.
+3. Generate `I18NUsage::Key`, `I18NUsage::locales()`, and `I18NUsage::locales_dynamic()` with `define_i18n_locales!`.
+4. Read values with `I18NStore::get` / `I18NDynamicWrapper::get` and `t_prefix!` / `t!`.
 
 ## DSL
 
 `define_i18n_fallback!` and `define_i18n!` support:
 
-- Nested field: `field { ... }`
+- Nested field: `field: { ... }`
 - Static resource: `field: "Text"`
-- Dynamic resource: `field: |a, b, c| => "{a} {b} {c}"`
+- Dynamic resource: `field: |a, b, c| "{a} {b} {c}"`
 
 Both macros now require a locale key:
 
 - Fallback: `define_i18n_fallback! { I18NUsage => en ... }`
 - Locale: `define_i18n! { I18NUsage => pt ... }`
 
-`define_i18n!` generates a constructor function named from the locale key in lowercase
-(for example `pt` -> `pt`), so you do not need a manual wrapper `fn`.
+`define_i18n_fallback!` and `define_i18n!` generate constructor functions named from the
+locale key in lowercase (for example `pt` -> `pt`), so you do not need a manual wrapper `fn`.
 
-Dynamic resources accept tuple arguments whose items implement `Display`; they are converted
-to `String` internally.
+Dynamic resources use explicit formatter parameters and are rendered with `.with((...))`.
+Formatter arguments are passed as tuples, and each item only needs to implement `Display`.
+
+Non-default locales are stored as sparse overrides. A lookup always returns a resolved view,
+so omitted override fields automatically read from the fallback locale.
 
 ## Example
 
@@ -48,12 +51,12 @@ use rusty18n::define_i18n_fallback;
 
 define_i18n_fallback! {
     I18NUsage => en
-    greetings {
+    greetings: {
         waves: "Waves",
         cool: "Hey that is cool",
     },
-    calculus {
-        answers: |a, b, c| => "{a}+{b}={c} yeah!",
+    calculus: {
+        answers: |a, b, c| "{a}+{b}={c} yeah!",
     },
 }
 ```
@@ -66,7 +69,7 @@ use rusty18n::define_i18n;
 
 define_i18n! {
     I18NUsage => pt
-    greetings {
+    greetings: {
         waves: "Oi!",
     }
 }
@@ -112,11 +115,12 @@ In this example:
 
 - `greetings.waves` is overridden in `pt` (`"Oi!"`)
 - `calculus.answers` is missing in `pt`, so it falls back to the fallback locale
+- `wah!(calculus.answers)` returns a dynamic formatter, so `.with((a, b, result))` renders it
 
 ## Macros
 
 - `define_i18n_fallback!`: defines fallback type + values and generates a locale constructor.
 - `define_i18n!`: defines sparse locale overrides and generates a locale constructor.
-- `define_i18n_locales!`: generates the `I18NUsage` namespace module with `Value`, `Key`, and `locales()`.
-- `t_prefix!`: creates a scoped accessor macro for an `I18NAccess` value.
+- `define_i18n_locales!`: generates the `I18NUsage` namespace module with `Value`, `Override`, `Key`, `locales()`, and `locales_dynamic()`.
+- `t_prefix!`: creates a scoped accessor macro for a resolved locale value.
 - `t!`: direct accessor macro for one-off lookups.

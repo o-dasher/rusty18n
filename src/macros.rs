@@ -2,47 +2,81 @@
 ///
 /// Leaf forms:
 /// - `"text"` => fallback `R`, override `Option<R>`
-/// - `"text with {placeholders}"` => fallback `R`, override `Option<R>`
+/// - `|args...| "format string"` => `I18NDynamicFormatter<(String, ...)>`, plus
+///   `Option<...>` in overrides
 ///
 /// The DSL supports:
 /// - `field: "text"` leaves
+/// - `field: |args...| "format string"` dynamic leaves
 /// - `field: { ... }` nested blocks
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __i18n_resource_type {
+macro_rules! __i18n_build_resource {
     ($lit:literal) => {
-        $crate::R<{ $crate::__template_arity($lit) }>
+        $crate::I18NDynamicResourceValue::from($lit)
     };
 }
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __i18n_build_resource {
-    ($lit:literal) => {{
-        const _: [(); 1] = [(); $crate::__template_is_valid($lit) as usize];
-        const DISPLAY_LEN: usize = $crate::__normalized_template_len($lit);
-        const DISPLAY_BYTES: [u8; DISPLAY_LEN] = $crate::__build_normalized_template($lit);
-        const DISPLAY_TEXT: &str = $crate::__utf8(&DISPLAY_BYTES);
-        const SLOT_COUNT: usize = $crate::__template_slot_count($lit);
-        const RENDER_PLAN: $crate::I18NRenderPlan<SLOT_COUNT> = $crate::__build_render_plan($lit);
+macro_rules! __i18n_string_type {
+    ($name:ident) => {
+        ::std::string::String
+    };
+}
 
-        $crate::I18NDynamicResourceValue::<{ $crate::__template_arity($lit) }>::new_static(
-            if DISPLAY_LEN == $lit.len() {
-                $lit
-            } else {
-                DISPLAY_TEXT
-            },
-            $lit,
-            &RENDER_PLAN.slots,
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __i18n_dynamic_resource_type {
+    () => {
+        $crate::I18NDynamicFormatter<()>
+    };
+
+    ($($name:ident),+ $(,)?) => {
+        $crate::I18NDynamicFormatter<($( $crate::__i18n_string_type!($name), )+)>
+    };
+
+    ($($unsupported:tt)+) => {
+        ::core::compile_error!(
+            "dynamic formatter parameters support only comma-separated identifiers"
+        );
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __i18n_build_dynamic_resource {
+    ($lit:literal; ) => {
+        $crate::I18NDynamicFormatter::new(|(): ()| ::std::format!($lit))
+    };
+
+    ($lit:literal; $($name:ident),+ $(,)?) => {
+        $crate::I18NDynamicFormatter::<($( $crate::__i18n_string_type!($name), )+)>::new(
+            |($($name,)+)| ::std::format!($lit),
         )
-    }};
+    };
+
+    ($lit:literal; $($unsupported:tt)+) => {
+        ::core::compile_error!(
+            "dynamic formatter parameters support only comma-separated identifiers"
+        );
+    };
 }
 
 #[doc(hidden)]
 #[macro_export]
 macro_rules! i18n_define_types {
     ($type_name:ident { $($body:tt)* }) => {
-        $crate::i18n_define_type_fields!(@parse [finish $type_name] [] [] $($body)*);
+        $crate::i18n_define_type_fields!(
+            @parse
+            [finish $type_name]
+            [$type_name]
+            []
+            []
+            []
+            []
+            $($body)*
+        );
     };
 }
 
@@ -53,6 +87,7 @@ macro_rules! i18n_define_struct {
     ($type_name:ident { $($fields:tt)* }) => {
         $crate::__structstruck_strike! {
             #[structstruck::each[derive(Debug, Default, $crate::Reflect)]]
+            #[structstruck::each[reflect(from_reflect = false)]]
             #[structstruck::each[structstruck::long_names]]
             pub struct $type_name {
                 $($fields)*
@@ -82,45 +117,193 @@ macro_rules! i18n_define_struct {
 /// field tree instead of nested macro calls in its input.
 ///
 /// Leaf semantics:
-/// - fallback leaf: `R`
-/// - override leaf: `Option<R>`
+/// - fallback static leaf: `R`
+/// - fallback dynamic leaf: `I18NDynamicFormatter<(String, ...)>`
+/// - override leaves wrap the same type in `Option`
 #[doc(hidden)]
 #[macro_export]
 macro_rules! i18n_define_type_fields {
-    (@parse [$callback:ident $($ctx:tt)*] [$($value_out:tt)*] [$($override_out:tt)*]) => {
-        $crate::i18n_define_type_fields!(@$callback $($ctx)* [$($value_out)*] [$($override_out)*]);
+    (@parse
+        [$($callback:tt)+]
+        [$root:ident]
+        [$($path:ident,)*]
+        [$($leaf_defs:tt)*]
+        [$($value_out:tt)*]
+        [$($override_out:tt)*]
+    ) => {
+        $crate::i18n_define_type_fields!(
+            @call
+            [$($callback)+]
+            [$($leaf_defs)*]
+            [$($value_out)*]
+            [$($override_out)*]
+        );
     };
 
-    (@parse [$callback:ident $($ctx:tt)*] [$($value_out:tt)*] [$($override_out:tt)*] $field:ident : { $($nested:tt)* } $(, $($rest:tt)*)?) => {
+    (@parse
+        [$($callback:tt)+]
+        [$root:ident]
+        [$($path:ident,)*]
+        [$($leaf_defs:tt)*]
+        [$($value_out:tt)*]
+        [$($override_out:tt)*]
+        $field:ident : { $($nested:tt)* }
+        $(, $($rest:tt)*)?
+    ) => {
         $crate::i18n_define_type_fields!(
             @parse
-            [finish_nested [$callback $($ctx)*] [$($value_out)*] [$($override_out)*] $field [$($($rest)*)?]]
+            [
+                finish_nested
+                [$($callback)+]
+                [$root]
+                [$($path,)*]
+                [$($leaf_defs)*]
+                [$($value_out)*]
+                [$($override_out)*]
+                $field
+                [$($($rest)*)?]
+            ]
+            [$root]
+            [$($path,)* $field,]
+            []
             []
             []
             $($nested)*
         );
     };
 
-    (@parse [$callback:ident $($ctx:tt)*] [$($value_out:tt)*] [$($override_out:tt)*] $field:ident : $lit:literal $(, $($rest:tt)*)?) => {
+    (@parse
+        [$($callback:tt)+]
+        [$root:ident]
+        [$($path:ident,)*]
+        [$($leaf_defs:tt)*]
+        [$($value_out:tt)*]
+        [$($override_out:tt)*]
+        $field:ident : | $($rest:tt)+
+    ) => {
+        $crate::i18n_define_type_fields!(
+            @dynamic
+            [$($callback)+]
+            [$root]
+            [$($path,)*]
+            [$($leaf_defs)*]
+            [$($value_out)*]
+            [$($override_out)*]
+            $field
+            []
+            $($rest)+
+        );
+    };
+
+    (@dynamic
+        [$($callback:tt)+]
+        [$root:ident]
+        [$($path:ident,)*]
+        [$($leaf_defs:tt)*]
+        [$($value_out:tt)*]
+        [$($override_out:tt)*]
+        $field:ident
+        [$($params:tt)*]
+        | $lit:literal
+        $(, $($rest:tt)*)?
+    ) => {
         $crate::i18n_define_type_fields!(
             @parse
-            [$callback $($ctx)*]
+            [$($callback)+]
+            [$root]
+            [$($path,)*]
+            [$($leaf_defs)*]
             [
                 $($value_out)*
-                pub $field: $crate::__i18n_resource_type!($lit),
+                pub $field: $crate::__i18n_dynamic_resource_type!($($params)*),
             ]
             [
                 $($override_out)*
-                pub $field: Option<$crate::__i18n_resource_type!($lit)>,
+                pub $field: Option<$crate::__i18n_dynamic_resource_type!($($params)*)>,
             ]
             $($($rest)*)?
         );
     };
 
-    (@finish_nested [$callback:ident $($ctx:tt)*] [$($outer_value_out:tt)*] [$($outer_override_out:tt)*] $field:ident [$($rest:tt)*] [$($nested_value_out:tt)*] [$($nested_override_out:tt)*]) => {
+    (@dynamic
+        [$($callback:tt)+]
+        [$root:ident]
+        [$($path:ident,)*]
+        [$($leaf_defs:tt)*]
+        [$($value_out:tt)*]
+        [$($override_out:tt)*]
+        $field:ident
+        [$($params:tt)*]
+        $next:tt
+        $($rest:tt)*
+    ) => {
+        $crate::i18n_define_type_fields!(
+            @dynamic
+            [$($callback)+]
+            [$root]
+            [$($path,)*]
+            [$($leaf_defs)*]
+            [$($value_out)*]
+            [$($override_out)*]
+            $field
+            [$($params)* $next]
+            $($rest)*
+        );
+    };
+
+    (@parse
+        [$($callback:tt)+]
+        [$root:ident]
+        [$($path:ident,)*]
+        [$($leaf_defs:tt)*]
+        [$($value_out:tt)*]
+        [$($override_out:tt)*]
+        $field:ident : $lit:literal
+        $(, $($rest:tt)*)?
+    ) => {
         $crate::i18n_define_type_fields!(
             @parse
-            [$callback $($ctx)*]
+            [$($callback)+]
+            [$root]
+            [$($path,)*]
+            [$($leaf_defs)*]
+            [
+                $($value_out)*
+                pub $field: $crate::R,
+            ]
+            [
+                $($override_out)*
+                pub $field: Option<$crate::R>,
+            ]
+            $($($rest)*)?
+        );
+    };
+
+    (@call
+        [
+            finish_nested
+            [$($callback:tt)+]
+            [$root:ident]
+            [$($path:ident,)*]
+            [$($outer_leaf_defs:tt)*]
+            [$($outer_value_out:tt)*]
+            [$($outer_override_out:tt)*]
+            $field:ident
+            [$($rest:tt)*]
+        ]
+        [$($nested_leaf_defs:tt)*]
+        [$($nested_value_out:tt)*]
+        [$($nested_override_out:tt)*]
+    ) => {
+        $crate::i18n_define_type_fields!(
+            @parse
+            [$($callback)+]
+            [$root]
+            [$($path,)*]
+            [
+                $($outer_leaf_defs)*
+                $($nested_leaf_defs)*
+            ]
             [
                 $($outer_value_out)*
                 pub $field: struct {
@@ -137,9 +320,15 @@ macro_rules! i18n_define_type_fields {
         );
     };
 
-    (@finish $type_name:ident [$($value_fields:tt)*] [$($override_fields:tt)*]) => {
+    (@call
+        [finish $type_name:ident]
+        [$($leaf_defs:tt)*]
+        [$($value_fields:tt)*]
+        [$($override_fields:tt)*]
+    ) => {
         ::paste::paste! {
             pub mod [<$type_name:snake>] {
+                $($leaf_defs)*
                 $crate::i18n_define_struct!($type_name { $($value_fields)* });
                 $crate::i18n_define_struct!([<$type_name Overrides>] { $($override_fields)* });
             }
@@ -152,7 +341,7 @@ macro_rules! i18n_define_type_fields {
 /// Supported override forms:
 /// - `field: { ... }` for nested objects
 /// - `field: "text"` for static resources
-/// - `field: "text with {placeholders}"` for inferred dynamic resources
+/// - `field: |args...| "format string"` for generated formatter resources
 ///
 /// Leaves become concrete resources and nested blocks recurse into the already-typed
 /// field value so `deep-struct-update` can infer the right nested type.
@@ -160,37 +349,36 @@ macro_rules! i18n_define_type_fields {
 #[macro_export]
 macro_rules! i18n_build_value {
     ($base:expr; $($body:tt)*) => {
-        $crate::i18n_build_value!(@collect [$base] [] $($body)*)
-    };
-
-    (@collect [$base:expr] [$($fields:tt)*]) => {
-        $crate::__deep_update! {
-            $($fields)*
-            ..$base
+        {
+            let mut __value = $base;
+            $crate::i18n_build_value!(@apply __value; $($body)*);
+            __value
         }
     };
 
-    (@collect [$base:expr] [$($fields:tt)*] $field:ident : { $($nested:tt)* } $(, $($rest:tt)*)?) => {
-        $crate::i18n_build_value!(
-            @collect
-            [$base]
-            [
-                $($fields)*
-                $field: $crate::i18n_build_value!(($base).$field; $($nested)*),
-            ]
-            $($($rest)*)?
-        )
+    (@apply $value:ident;) => {};
+
+    (@apply $value:ident; $field:ident : { $($nested:tt)* } $(, $($rest:tt)*)?) => {
+        $value.$field = $crate::i18n_build_value!($value.$field; $($nested)*);
+        $crate::i18n_build_value!(@apply $value; $($($rest)*)?);
     };
 
-    (@collect [$base:expr] [$($fields:tt)*] $field:ident : $lit:literal $(, $($rest:tt)*)?) => {
-        $crate::i18n_build_value!(
-            @collect [$base]
-            [
-                $($fields)*
-                $field: $crate::__i18n_build_resource!($lit),
-            ]
-            $($($rest)*)?
-        )
+    (@apply $value:ident; $field:ident : | $($rest:tt)+) => {
+        $crate::i18n_build_value!(@dynamic $value; $field [] $($rest)+);
+    };
+
+    (@dynamic $value:ident; $field:ident [$($params:tt)*] | $lit:literal $(, $($rest:tt)*)?) => {
+        $value.$field = $crate::__i18n_build_dynamic_resource!($lit; $($params)*);
+        $crate::i18n_build_value!(@apply $value; $($($rest)*)?);
+    };
+
+    (@dynamic $value:ident; $field:ident [$($params:tt)*] $next:tt $($rest:tt)*) => {
+        $crate::i18n_build_value!(@dynamic $value; $field [$($params)* $next] $($rest)*);
+    };
+
+    (@apply $value:ident; $field:ident : $lit:literal $(, $($rest:tt)*)?) => {
+        $value.$field = $crate::__i18n_build_resource!($lit);
+        $crate::i18n_build_value!(@apply $value; $($($rest)*)?);
     };
 }
 
@@ -201,37 +389,36 @@ macro_rules! i18n_build_value {
 #[macro_export]
 macro_rules! i18n_build_override {
     ($base:expr; $($body:tt)*) => {
-        $crate::i18n_build_override!(@collect [$base] [] $($body)*)
-    };
-
-    (@collect [$base:expr] [$($fields:tt)*]) => {
-        $crate::__deep_update! {
-            $($fields)*
-            ..$base
+        {
+            let mut __value = $base;
+            $crate::i18n_build_override!(@apply __value; $($body)*);
+            __value
         }
     };
 
-    (@collect [$base:expr] [$($fields:tt)*] $field:ident : { $($nested:tt)* } $(, $($rest:tt)*)?) => {
-        $crate::i18n_build_override!(
-            @collect
-            [$base]
-            [
-                $($fields)*
-                $field: $crate::i18n_build_override!(($base).$field; $($nested)*),
-            ]
-            $($($rest)*)?
-        )
+    (@apply $value:ident;) => {};
+
+    (@apply $value:ident; $field:ident : { $($nested:tt)* } $(, $($rest:tt)*)?) => {
+        $value.$field = $crate::i18n_build_override!($value.$field; $($nested)*);
+        $crate::i18n_build_override!(@apply $value; $($($rest)*)?);
     };
 
-    (@collect [$base:expr] [$($fields:tt)*] $field:ident : $lit:literal $(, $($rest:tt)*)?) => {
-        $crate::i18n_build_override!(
-            @collect [$base]
-            [
-                $($fields)*
-                $field: Some($crate::__i18n_build_resource!($lit)),
-            ]
-            $($($rest)*)?
-        )
+    (@apply $value:ident; $field:ident : | $($rest:tt)+) => {
+        $crate::i18n_build_override!(@dynamic $value; $field [] $($rest)+);
+    };
+
+    (@dynamic $value:ident; $field:ident [$($params:tt)*] | $lit:literal $(, $($rest:tt)*)?) => {
+        $value.$field = Some($crate::__i18n_build_dynamic_resource!($lit; $($params)*));
+        $crate::i18n_build_override!(@apply $value; $($($rest)*)?);
+    };
+
+    (@dynamic $value:ident; $field:ident [$($params:tt)*] $next:tt $($rest:tt)*) => {
+        $crate::i18n_build_override!(@dynamic $value; $field [$($params)* $next] $($rest)*);
+    };
+
+    (@apply $value:ident; $field:ident : $lit:literal $(, $($rest:tt)*)?) => {
+        $value.$field = Some($crate::__i18n_build_resource!($lit));
+        $crate::i18n_build_override!(@apply $value; $($($rest)*)?);
     };
 }
 
@@ -240,7 +427,7 @@ macro_rules! i18n_build_override {
 /// DSL forms:
 /// - `field: { ... }`
 /// - `field: "text"`
-/// - `field: "This is {a}, {b}, {c}"`
+/// - `field: |a, b, c| "This is {a}, {b}, {c}"`
 ///
 /// The macro requires a locale key:
 /// - `define_i18n_fallback! { I18NUsage => en ... }`
@@ -282,7 +469,7 @@ macro_rules! define_i18n_fallback {
 /// Override forms:
 /// - `field: { ... }`
 /// - `field: "text"`
-/// - `field: "This is {a}, {b}, {c}"`
+/// - `field: |a, b, c| "This is {a}, {b}, {c}"`
 ///
 /// The macro requires a locale key:
 /// - `define_i18n! { I18NUsage => pt ... }`

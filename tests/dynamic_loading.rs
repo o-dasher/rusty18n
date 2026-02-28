@@ -7,7 +7,7 @@ mod fixtures {
         rusty18n::define_i18n_fallback! {
             I18NUsage => en
             messages: {
-                inferred: "This is {a}, {b}, {c}",
+                inferred: |a, b, c| "This is {a}, {b}, {c}",
                 literal: "Fallback literal",
             },
         }
@@ -17,16 +17,16 @@ mod fixtures {
         rusty18n::define_i18n! {
             super::I18NUsage => pt
             messages: {
-                inferred: "{c} depois {a} depois {b}",
+                inferred: |a, b, c| "{c} depois {a} depois {b}",
             }
         }
     }
 }
 
-fn inferred_text(
+fn formatted_text(
     locale: &rusty18n::I18NResolved<'_, I18NUsage::Value, I18NUsage::Override>,
 ) -> String {
-    rusty18n::t!(locale.messages.inferred).with(&["C", "A", "B"])
+    rusty18n::t!(locale.messages.inferred).with(("A", "B", "C"))
 }
 
 #[test]
@@ -39,8 +39,8 @@ fn loads_and_unloads_locales_on_demand() {
 
     let pt = locales.get(I18NUsage::Key::pt);
     assert_eq!(
-        rusty18n::t!(pt.messages.inferred).with(&["C", "A", "B"]),
-        "This is C, A, B"
+        rusty18n::t!(pt.messages.inferred).with(("A", "B", "C")),
+        "This is A, B, C"
     );
     assert_eq!(rusty18n::t!(pt.messages.literal), "Fallback literal");
 
@@ -49,7 +49,7 @@ fn loads_and_unloads_locales_on_demand() {
 
     let pt = locales.get(I18NUsage::Key::pt);
     assert_eq!(
-        rusty18n::t!(pt.messages.inferred).with(&["C", "A", "B"]),
+        rusty18n::t!(pt.messages.inferred).with(("A", "B", "C")),
         "C depois A depois B"
     );
     assert_eq!(rusty18n::t!(pt.messages.literal), "Fallback literal");
@@ -60,8 +60,8 @@ fn loads_and_unloads_locales_on_demand() {
 
     let pt = locales.get(I18NUsage::Key::pt);
     assert_eq!(
-        rusty18n::t!(pt.messages.inferred).with(&["C", "A", "B"]),
-        "This is C, A, B"
+        rusty18n::t!(pt.messages.inferred).with(("A", "B", "C")),
+        "This is A, B, C"
     );
 
     assert!(locales.loaded.unload(I18NUsage::Key::en).is_none());
@@ -72,13 +72,13 @@ fn loads_and_unloads_locales_on_demand() {
 fn shares_access_behavior_between_wrappers() {
     let eager = I18NUsage::locales();
     let eager_pt = eager.get(I18NUsage::Key::pt);
-    assert_eq!(inferred_text(&eager_pt), "C depois A depois B");
+    assert_eq!(formatted_text(&eager_pt), "C depois A depois B");
 
     let mut dynamic = I18NUsage::locales_dynamic();
     let dynamic_pt = dynamic.get(I18NUsage::Key::pt);
-    assert_eq!(inferred_text(&dynamic_pt), "This is C, A, B");
+    assert_eq!(formatted_text(&dynamic_pt), "This is A, B, C");
 
     assert!(dynamic.load(I18NUsage::Key::pt));
     let dynamic_pt = dynamic.get(I18NUsage::Key::pt);
-    assert_eq!(inferred_text(&dynamic_pt), "C depois A depois B");
+    assert_eq!(formatted_text(&dynamic_pt), "C depois A depois B");
 }

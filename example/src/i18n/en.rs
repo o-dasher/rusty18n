@@ -7,6 +7,6 @@ define_i18n_fallback! {
         cool: "Hey that is cool",
     },
     calculus: {
-        answers: "{a}+{b}={c} yeah!",
+        answers: |a, b, c| "{a}+{b}={c} yeah!",
     },
 }
