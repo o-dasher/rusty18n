@@ -2,14 +2,15 @@ use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::{
+    Error, Index, LitStr, Path, Token,
     parse::{Parse, ParseStream},
-    parse_macro_input, Error, Index, LitStr, Path, Token,
+    parse_macro_input,
 };
 use winnow::{
+    Parser,
     combinator::{alt, delimited, repeat},
     error::ModalResult,
     token::take_while,
-    Parser,
 };
 
 struct TemplateSpec {

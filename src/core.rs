@@ -1,6 +1,6 @@
 #[cfg(feature = "bevy_reflect")]
 use bevy_reflect::Reflect;
-use derive_more::derive::{AsRef, Deref, Display as DeriveDisplay};
+use derive_more::derive::{AsRef, Deref, DerefMut, Display as DeriveDisplay, From};
 use impl_trait_for_tuples::impl_for_tuples;
 use std::{collections::HashMap, fmt::Display, hash::Hash};
 
@@ -133,74 +133,36 @@ pub trait I18NTrait {
 
 /// The `I18NStore` wraps a `HashMap` that maps key value pairs of `Locale` keys and localized
 /// implementations.
-#[derive(Debug)]
+#[derive(Debug, Deref, DerefMut, From)]
 pub struct I18NStore<K: Eq + Hash + Copy, V>(pub HashMap<K, V>);
 
-impl<K: Eq + Hash + Copy, V> From<Vec<(K, V)>> for I18NStore<K, V> {
-    fn from(value: Vec<(K, V)>) -> Self {
-        Self(value.into_iter().collect())
+impl<K: Eq + Hash + Copy, V> std::iter::FromIterator<(K, V)> for I18NStore<K, V> {
+    fn from_iter<T: IntoIterator<Item = (K, V)>>(iter: T) -> Self {
+        iter.into_iter().collect::<HashMap<_, _>>().into()
     }
 }
 
-#[derive(Debug)]
-struct I18NCore<K: Eq + Hash + Default + Copy, V: I18NFallback> {
-    store: I18NStore<K, V>,
-}
-
-impl<K: Eq + Hash + Default + Copy, V: I18NFallback> I18NCore<K, V> {
-    fn new_empty() -> Self {
-        let mut store = HashMap::new();
-        store.insert(K::default(), V::fallback());
-
-        Self {
-            store: I18NStore(store),
-        }
-    }
-
-    fn new_loaded(store: Vec<(K, V)>) -> Self {
-        let mut store = I18NStore::from(store);
-
-        if let std::collections::hash_map::Entry::Vacant(entry) = store.0.entry(K::default()) {
-            entry.insert(V::fallback());
-        }
-
-        Self { store }
+impl<K: Eq + Hash + Default + Copy, V: I18NFallback> I18NStore<K, V> {
+    fn ensure_fallback(&mut self) {
+        self.entry(K::default()).or_insert_with(V::fallback);
     }
 
     fn fallback_ref(&self) -> Result<&V> {
-        self.store
-            .0
-            .get(&K::default())
-            .ok_or(Error::MissingFallbackLocale)
+        self.get(&K::default()).ok_or(Error::MissingFallbackLocale)
     }
 
-    fn loaded_ref(&self, locale: K) -> Option<&V> {
-        self.store.0.get(&locale)
-    }
-
-    const fn store_ref(&self) -> &I18NStore<K, V> {
-        &self.store
-    }
-
-    fn insert_loaded(&mut self, locale: K, value: V) -> Option<V> {
-        self.store.0.insert(locale, value)
-    }
-
-    fn unload(&mut self, locale: K) -> Option<V> {
+    fn unload_locale(&mut self, locale: K) -> Option<V> {
         if locale == K::default() {
             None
         } else {
-            self.store.0.remove(&locale)
+            self.remove(&locale)
         }
     }
 
-    fn unload_all(&mut self) {
+    fn unload_all_locales(&mut self) {
         let default_locale = K::default();
-        self.store.0.retain(|locale, _| *locale == default_locale);
-        if let std::collections::hash_map::Entry::Vacant(entry) = self.store.0.entry(default_locale)
-        {
-            entry.insert(V::fallback());
-        }
+        self.retain(|locale, _| *locale == default_locale);
+        self.ensure_fallback();
     }
 }
 
@@ -236,9 +198,11 @@ impl<L: I18NTrait> I18NAccess<'_, L> {
     }
 }
 
-/// A wrapper for eagerly loaded i18n resources, providing access and fallback support.
+/// Eagerly loaded i18n resources with fallback support.
 #[derive(Debug)]
-pub struct I18NWrapper<K: Eq + Hash + Default + Copy, V: I18NFallback>(I18NCore<K, V>);
+pub struct I18NWrapper<K: Eq + Hash + Default + Copy, V: I18NFallback> {
+    store: I18NStore<K, V>,
+}
 
 impl<K: Eq + Hash + Default + Copy, V: I18NFallback> I18NTrait for I18NWrapper<K, V> {
     type K = K;
@@ -259,7 +223,9 @@ where
     ///
     #[must_use]
     pub fn new(store: Vec<(K, V)>) -> Self {
-        Self(I18NCore::new_loaded(store))
+        let mut store: I18NStore<K, V> = store.into_iter().collect();
+        store.ensure_fallback();
+        Self { store }
     }
 
     /// Constructs a new `I18NDynamicWrapper`.
@@ -281,7 +247,7 @@ where
     /// Returns the eagerly loaded store.
     #[must_use]
     pub const fn store(&self) -> &I18NStore<K, V> {
-        self.0.store_ref()
+        &self.store
     }
 
     /// Returns whether the locale is currently resident in memory.
@@ -289,7 +255,7 @@ where
     /// For eager wrappers, any registered locale is already loaded.
     #[must_use]
     pub fn is_loaded(&self, locale: K) -> bool {
-        self.0.loaded_ref(locale).is_some()
+        self.store.contains_key(&locale)
     }
 
     /// Creates an access wrapper for the requested locale.
@@ -297,24 +263,19 @@ where
     /// # Errors
     /// Returns [`Error::MissingFallbackLocale`] when the default locale entry is absent.
     pub fn get(&self, locale: K) -> Result<I18NAccess<'_, Self>> {
-        let fallback = self.0.fallback_ref()?;
-        let to = self.0.loaded_ref(locale).unwrap_or(fallback);
+        let fallback = self.store.fallback_ref()?;
+        let to = self.store.get(&locale).unwrap_or(fallback);
 
         Ok(I18NAccess { fallback, to })
     }
 }
 
+/// Dynamically loaded i18n resources.
 #[derive(Debug)]
-struct I18NDynamicCore<K: Eq + Hash + Default + Copy, V: I18NFallback> {
-    loaded: I18NCore<K, V>,
+pub struct I18NDynamicWrapper<K: Eq + Hash + Default + Copy, V: I18NFallback> {
+    loaded: I18NStore<K, V>,
     loaders: HashMap<K, I18NLocaleLoader<V>>,
 }
-
-/// A wrapper for dynamically loaded i18n resources.
-#[derive(Debug)]
-pub struct I18NDynamicWrapper<K: Eq + Hash + Default + Copy, V: I18NFallback>(
-    I18NDynamicCore<K, V>,
-);
 
 impl<K: Eq + Hash + Default + Copy, V: I18NFallback> I18NTrait for I18NDynamicWrapper<K, V> {
     type K = K;
@@ -335,16 +296,16 @@ where
     ///
     #[must_use]
     pub fn new(loaders: Vec<(K, I18NLocaleLoader<V>)>) -> Self {
-        Self(I18NDynamicCore {
-            loaded: I18NCore::new_empty(),
+        Self {
+            loaded: HashMap::from([(K::default(), V::fallback())]).into(),
             loaders: loaders.into_iter().collect(),
-        })
+        }
     }
 
     /// Returns the currently loaded locale store.
     #[must_use]
     pub const fn store(&self) -> &I18NStore<K, V> {
-        self.0.loaded.store_ref()
+        &self.loaded
     }
 
     /// Registers or replaces a locale loader.
@@ -360,7 +321,7 @@ where
         locale: K,
         loader: I18NLocaleLoader<V>,
     ) -> Option<I18NLocaleLoader<V>> {
-        self.0.loaders.insert(locale, loader)
+        self.loaders.insert(locale, loader)
     }
 
     /// Unregisters a locale loader and unloads that locale if it is currently loaded.
@@ -371,8 +332,8 @@ where
     /// # Returns
     /// The previously registered loader for the locale, if any.
     pub fn unregister_locale(&mut self, locale: K) -> Option<I18NLocaleLoader<V>> {
-        self.0.loaded.unload(locale);
-        self.0.loaders.remove(&locale)
+        self.loaded.unload_locale(locale);
+        self.loaders.remove(&locale)
     }
 
     /// Loads a single locale into memory using its registered loader.
@@ -385,23 +346,24 @@ where
     ///
     #[must_use]
     pub fn load(&mut self, locale: K) -> bool {
-        self.0.loaders.get(&locale).copied().is_some_and(|load| {
-            self.0.loaded.insert_loaded(locale, load());
-            true
-        })
+        let Some(load) = self.loaders.get(&locale).copied() else {
+            return false;
+        };
+
+        self.loaded.insert(locale, load());
+        true
     }
 
     /// Loads all registered locales into memory.
     pub fn load_all(&mut self) {
         let loaders = self
-            .0
             .loaders
             .iter()
             .map(|(&locale, &load)| (locale, load))
             .collect::<Vec<_>>();
 
         for (locale, load) in loaders {
-            self.0.loaded.insert_loaded(locale, load());
+            self.loaded.insert(locale, load());
         }
     }
 
@@ -413,25 +375,25 @@ where
     /// # Returns
     /// The previously loaded locale value, if it was loaded.
     pub fn unload(&mut self, locale: K) -> Option<V> {
-        self.0.loaded.unload(locale)
+        self.loaded.unload_locale(locale)
     }
 
     /// Unloads all currently loaded locales.
     ///
     pub fn unload_all(&mut self) {
-        self.0.loaded.unload_all();
+        self.loaded.unload_all_locales();
     }
 
     /// Returns whether a locale is currently loaded.
     #[must_use]
     pub fn is_loaded(&self, locale: K) -> bool {
-        self.0.loaded.loaded_ref(locale).is_some()
+        self.loaded.contains_key(&locale)
     }
 
     /// Returns whether a locale has a registered loader.
     #[must_use]
     pub fn is_registered(&self, locale: K) -> bool {
-        self.0.loaders.contains_key(&locale)
+        self.loaders.contains_key(&locale)
     }
 
     /// Creates an access wrapper for the requested locale.
@@ -439,8 +401,8 @@ where
     /// # Errors
     /// Returns [`Error::MissingFallbackLocale`] when the default locale entry is absent.
     pub fn get(&self, locale: K) -> Result<I18NAccess<'_, Self>> {
-        let fallback = self.0.loaded.fallback_ref()?;
-        let to = self.0.loaded.loaded_ref(locale).unwrap_or(fallback);
+        let fallback = self.loaded.fallback_ref()?;
+        let to = self.loaded.get(&locale).unwrap_or(fallback);
 
         Ok(I18NAccess { fallback, to })
     }
