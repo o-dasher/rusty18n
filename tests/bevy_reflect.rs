@@ -59,9 +59,9 @@ fn reflects_complete_locale_values_by_path() {
 }
 
 #[test]
-fn reflects_access_values_with_fallback() -> rusty18n::Result<()> {
+fn reflects_access_values_with_fallback() {
     let locales = I18NUsage::locales();
-    let pt = locales.get(I18NUsage::Key::pt)?;
+    let pt = locales.get(I18NUsage::Key::pt);
     assert_eq!(
         pt.by_path::<R>("greetings.waves")
             .expect("fallback waves should exist"),
@@ -83,6 +83,4 @@ fn reflects_access_values_with_fallback() -> rusty18n::Result<()> {
         "Portuguese translated"
     );
     assert!(pt.by_path::<R>("messages.missing").is_none());
-
-    Ok(())
 }

@@ -26,9 +26,9 @@ mod fixtures {
 }
 
 #[test]
-fn infers_placeholders_and_handles_escaped_braces() -> rusty18n::Result<()> {
+fn infers_placeholders_and_handles_escaped_braces() {
     let locales = I18NUsage::locales();
-    let en = locales.get(I18NUsage::Key::en)?;
+    let en = locales.get(I18NUsage::Key::en);
 
     assert_eq!(
         rusty18n::t!(en.messages.inferred).with((1, 2, 3)),
@@ -43,19 +43,15 @@ fn infers_placeholders_and_handles_escaped_braces() -> rusty18n::Result<()> {
         "Curly {brace} and value"
     );
     assert_eq!(rusty18n::t!(en.messages.literal), "Just {braces}");
-
-    Ok(())
 }
 
 #[test]
-fn infers_placeholder_order_from_first_appearance() -> rusty18n::Result<()> {
+fn infers_placeholder_order_from_first_appearance() {
     let locales = I18NUsage::locales();
-    let pt = locales.get(I18NUsage::Key::pt)?;
+    let pt = locales.get(I18NUsage::Key::pt);
 
     assert_eq!(
         rusty18n::t!(pt.messages.inferred).with(("C", "A", "B")),
         "C depois A depois B"
     );
-
-    Ok(())
 }

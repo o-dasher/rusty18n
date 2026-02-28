@@ -1,4 +1,4 @@
-use super::{I18NFallback, I18NStore, I18NTrait, Result};
+use super::{I18NFallback, I18NStore, I18NTrait};
 use std::{collections::HashMap, hash::Hash};
 
 /// A locale constructor used by the dynamic wrapper.
@@ -30,9 +30,14 @@ where
     ///
     #[must_use]
     pub fn new(loaders: Vec<(K, I18NLocaleLoader<V>)>) -> Self {
+        let default_locale = K::default();
+
         Self {
             loaded: I18NStore::new(std::iter::empty::<(K, V)>()),
-            loaders: loaders.into_iter().collect(),
+            loaders: loaders
+                .into_iter()
+                .filter(|(locale, _)| *locale != default_locale)
+                .collect(),
         }
     }
 
@@ -44,8 +49,9 @@ where
     /// # Returns
     /// The previously registered loader for the locale, if any.
     pub fn unregister_locale(&mut self, locale: K) -> Option<I18NLocaleLoader<V>> {
-        self.loaded.unload(locale);
-        self.loaders.remove(&locale)
+        self.loaders.remove(&locale).inspect(|_| {
+            self.loaded.unload(locale);
+        })
     }
 
     /// Loads a single locale into memory using its registered loader.
@@ -61,21 +67,20 @@ where
         self.loaders
             .get(&locale)
             .copied()
-            .map(|load| self.loaded.insert(locale, load()))
+            .map(|load| self.loaded.locales.insert(locale, load()))
             .is_some()
     }
 
     /// Loads all registered locales into memory.
     pub fn load_all(&mut self) {
         self.loaded
+            .locales
             .extend(self.loaders.iter().map(|(&locale, &load)| (locale, load())));
     }
 
     /// Returns the resolved locale value for the requested key.
-    ///
-    /// # Errors
-    /// Returns [`crate::Error::MissingFallbackLocale`] when the default locale entry is absent.
-    pub fn get(&self, locale: K) -> Result<&V> {
+    #[must_use]
+    pub fn get(&self, locale: K) -> &V {
         self.loaded.get(locale)
     }
 }

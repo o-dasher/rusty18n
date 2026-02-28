@@ -28,14 +28,14 @@ fn inferred_text(locale: &I18NUsage::Value) -> String {
 }
 
 #[test]
-fn loads_and_unloads_locales_on_demand() -> rusty18n::Result<()> {
+fn loads_and_unloads_locales_on_demand() {
     let mut locales = I18NUsage::locales_dynamic();
 
     assert!(locales.loaded.contains_key(&I18NUsage::Key::en));
     assert!(locales.loaders.contains_key(&I18NUsage::Key::pt));
     assert!(!locales.loaded.contains_key(&I18NUsage::Key::pt));
 
-    let pt = locales.get(I18NUsage::Key::pt)?;
+    let pt = locales.get(I18NUsage::Key::pt);
     assert_eq!(
         rusty18n::t!(pt.messages.inferred).with(("C", "A", "B")),
         "This is C, A, B"
@@ -45,7 +45,7 @@ fn loads_and_unloads_locales_on_demand() -> rusty18n::Result<()> {
     assert!(locales.load(I18NUsage::Key::pt));
     assert!(locales.loaded.contains_key(&I18NUsage::Key::pt));
 
-    let pt = locales.get(I18NUsage::Key::pt)?;
+    let pt = locales.get(I18NUsage::Key::pt);
     assert_eq!(
         rusty18n::t!(pt.messages.inferred).with(("C", "A", "B")),
         "C depois A depois B"
@@ -56,7 +56,7 @@ fn loads_and_unloads_locales_on_demand() -> rusty18n::Result<()> {
     assert!(unloaded.is_some());
     assert!(!locales.loaded.contains_key(&I18NUsage::Key::pt));
 
-    let pt = locales.get(I18NUsage::Key::pt)?;
+    let pt = locales.get(I18NUsage::Key::pt);
     assert_eq!(
         rusty18n::t!(pt.messages.inferred).with(("C", "A", "B")),
         "This is C, A, B"
@@ -64,23 +64,19 @@ fn loads_and_unloads_locales_on_demand() -> rusty18n::Result<()> {
 
     assert!(locales.loaded.unload(I18NUsage::Key::en).is_none());
     assert!(locales.loaded.contains_key(&I18NUsage::Key::en));
-
-    Ok(())
 }
 
 #[test]
-fn shares_access_behavior_between_wrappers() -> rusty18n::Result<()> {
+fn shares_access_behavior_between_wrappers() {
     let eager = I18NUsage::locales();
-    let eager_pt = eager.get(I18NUsage::Key::pt)?;
+    let eager_pt = eager.get(I18NUsage::Key::pt);
     assert_eq!(inferred_text(eager_pt), "C depois A depois B");
 
     let mut dynamic = I18NUsage::locales_dynamic();
-    let dynamic_pt = dynamic.get(I18NUsage::Key::pt)?;
+    let dynamic_pt = dynamic.get(I18NUsage::Key::pt);
     assert_eq!(inferred_text(dynamic_pt), "This is C, A, B");
 
     assert!(dynamic.load(I18NUsage::Key::pt));
-    let dynamic_pt = dynamic.get(I18NUsage::Key::pt)?;
+    let dynamic_pt = dynamic.get(I18NUsage::Key::pt);
     assert_eq!(inferred_text(dynamic_pt), "C depois A depois B");
-
-    Ok(())
 }
