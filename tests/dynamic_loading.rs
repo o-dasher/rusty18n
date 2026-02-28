@@ -34,9 +34,9 @@ where
 fn loads_and_unloads_locales_on_demand() -> rusty18n::Result<()> {
     let mut locales = I18NUsage::locales_dynamic();
 
-    assert!(locales.is_loaded(I18NUsage::Key::en));
-    assert!(locales.is_registered(I18NUsage::Key::pt));
-    assert!(!locales.is_loaded(I18NUsage::Key::pt));
+    assert!(locales.loaded.contains_key(&I18NUsage::Key::en));
+    assert!(locales.loaders.contains_key(&I18NUsage::Key::pt));
+    assert!(!locales.loaded.contains_key(&I18NUsage::Key::pt));
 
     let pt = locales.get(I18NUsage::Key::pt)?;
     assert_eq!(
@@ -46,7 +46,7 @@ fn loads_and_unloads_locales_on_demand() -> rusty18n::Result<()> {
     assert_eq!(rusty18n::t!(pt.messages.literal)?, "Fallback literal");
 
     assert!(locales.load(I18NUsage::Key::pt));
-    assert!(locales.is_loaded(I18NUsage::Key::pt));
+    assert!(locales.loaded.contains_key(&I18NUsage::Key::pt));
 
     let pt = locales.get(I18NUsage::Key::pt)?;
     assert_eq!(
@@ -55,9 +55,9 @@ fn loads_and_unloads_locales_on_demand() -> rusty18n::Result<()> {
     );
     assert_eq!(rusty18n::t!(pt.messages.literal)?, "Fallback literal");
 
-    let unloaded = locales.unload(I18NUsage::Key::pt);
+    let unloaded = locales.loaded.unload_locale(I18NUsage::Key::pt);
     assert!(unloaded.is_some());
-    assert!(!locales.is_loaded(I18NUsage::Key::pt));
+    assert!(!locales.loaded.contains_key(&I18NUsage::Key::pt));
 
     let pt = locales.get(I18NUsage::Key::pt)?;
     assert_eq!(
@@ -65,8 +65,8 @@ fn loads_and_unloads_locales_on_demand() -> rusty18n::Result<()> {
         "This is C, A, B"
     );
 
-    assert!(locales.unload(I18NUsage::Key::en).is_none());
-    assert!(locales.is_loaded(I18NUsage::Key::en));
+    assert!(locales.loaded.unload_locale(I18NUsage::Key::en).is_none());
+    assert!(locales.loaded.contains_key(&I18NUsage::Key::en));
 
     Ok(())
 }
