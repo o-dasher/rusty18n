@@ -1,7 +1,7 @@
 /// Expands the DSL into the generated value and override struct modules.
 #[doc(hidden)]
 #[macro_export]
-macro_rules! i18n_define_types {
+macro_rules! __i18n_define_types {
     ($type_name:ident { $($body:tt)* }) => {
         ::paste::paste! {
             pub mod [<$type_name:snake>] {
@@ -81,74 +81,33 @@ macro_rules! __i18n_wrap_expr {
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __i18n_define_struct_tree {
-    ($mode:ident $type_name:ident { $($body:tt)* }) => {
-        $crate::__i18n_define_struct_tree!(@parse $mode $type_name [] [] $($body)*);
+    ($mode:ident $name:ident { $($body:tt)* }) => {
+        $crate::__i18n_define_struct_tree!(@munch $mode $name [] $($body)*);
     };
 
-    (@parse $mode:ident $type_name:ident [$($fields:tt)*] [$($nested:tt)*]) => {
-        $crate::__i18n_finish_struct!($type_name { $($fields)* });
-        $($nested)*
+    (@munch $mode:ident $name:ident [$($f:tt)*]) => {
+        $crate::__i18n_finish_struct!($name { $($f)* });
     };
 
-    (@parse $mode:ident $type_name:ident [$($fields:tt)*] [$($nested:tt)*]
-        $field:ident : { $($nested_body:tt)* }
-        $(, $($rest:tt)*)?
-    ) => {
+    (@munch $mode:ident $name:ident [$($f:tt)*] $field:ident : { $($inner:tt)* } $(, $($rest:tt)*)?) => {
         ::paste::paste! {
-            $crate::__i18n_define_struct_tree!(
-                @parse
-                $mode
-                $type_name
-                [
-                    $($fields)*
-                    pub $field: [<$type_name $field:camel>],
-                ]
-                [
-                    $($nested)*
-                    $crate::__i18n_define_struct_tree!(
-                        $mode
-                        [<$type_name $field:camel>]
-                        { $($nested_body)* }
-                    );
-                ]
-                $($($rest)*)?
-            );
+            $crate::__i18n_define_struct_tree!($mode [<$name $field:camel>] { $($inner)* });
+            $crate::__i18n_define_struct_tree!(@munch $mode $name [$($f)* pub $field: [<$name $field:camel>],] $($($rest)*)?);
         }
     };
 
-    (@parse $mode:ident $type_name:ident [$($fields:tt)*] [$($nested:tt)*]
-        $field:ident : | $($name:ident),* $(,)? | $lit:literal
-        $(, $($rest:tt)*)?
-    ) => {
+    (@munch $mode:ident $name:ident [$($f:tt)*] $field:ident : | $($arg:ident),* $(,)? | $lit:literal $(, $($rest:tt)*)?) => {
         $crate::__i18n_define_struct_tree!(
-            @parse
-            $mode
-            $type_name
-            [
-                $($fields)*
-                pub $field: $crate::__i18n_wrap_type!(
-                    $mode
-                    $crate::I18NDynamicFormatter<($( $crate::__i18n_string_type!($name), )*)>
-                ),
-            ]
-            [$($nested)*]
+            @munch $mode $name 
+            [$($f)* pub $field: $crate::__i18n_wrap_type!($mode $crate::I18NDynamicFormatter<($( $crate::__i18n_string_type!($arg), )*)>),]
             $($($rest)*)?
         );
     };
 
-    (@parse $mode:ident $type_name:ident [$($fields:tt)*] [$($nested:tt)*]
-        $field:ident : $lit:literal
-        $(, $($rest:tt)*)?
-    ) => {
+    (@munch $mode:ident $name:ident [$($f:tt)*] $field:ident : $lit:literal $(, $($rest:tt)*)?) => {
         $crate::__i18n_define_struct_tree!(
-            @parse
-            $mode
-            $type_name
-            [
-                $($fields)*
-                pub $field: $crate::__i18n_wrap_type!($mode $crate::R),
-            ]
-            [$($nested)*]
+            @munch $mode $name 
+            [$($f)* pub $field: $crate::__i18n_wrap_type!($mode $crate::R),]
             $($($rest)*)?
         );
     };
@@ -160,33 +119,32 @@ macro_rules! __i18n_define_struct_tree {
 macro_rules! __i18n_build {
     ($mode:ident $base:expr; $($body:tt)*) => {
         {
-            let mut __value = $base;
-            $crate::__i18n_build!(@apply $mode __value; $($body)*);
-            __value
+            let mut __v = $base;
+            $crate::__i18n_build!(@munch $mode __v $($body)*);
+            __v
         }
     };
 
-    (@apply $mode:ident $value:ident;) => {};
+    (@munch $mode:ident $v:ident) => {};
 
-    (@apply $mode:ident $value:ident; $field:ident : { $($nested:tt)* } $(, $($rest:tt)*)?) => {
-        $value.$field = $crate::__i18n_build!($mode $value.$field; $($nested)*);
-        $crate::__i18n_build!(@apply $mode $value; $($($rest)*)?);
+    (@munch $mode:ident $v:ident $f:ident : { $($inner:tt)* } $(, $($rest:tt)*)?) => {
+        $v.$f = $crate::__i18n_build!($mode $v.$f; $($inner)*);
+        $crate::__i18n_build!(@munch $mode $v $($($rest)*)?);
     };
 
-    (@apply $mode:ident $value:ident; $field:ident : | $($name:ident),* $(,)? | $lit:literal $(, $($rest:tt)*)?) => {
-        $value.$field = $crate::__i18n_wrap_expr!(
+    (@munch $mode:ident $v:ident $f:ident : | $($arg:ident),* $(,)? | $lit:literal $(, $($rest:tt)*)?) => {
+        $v.$f = $crate::__i18n_wrap_expr!(
             $mode
-            $crate::I18NDynamicFormatter::<($( $crate::__i18n_string_type!($name), )*)>::new(
-                |($($name,)*)| ::std::format!($lit),
+            $crate::I18NDynamicFormatter::<($( $crate::__i18n_string_type!($arg), )*)>::new(
+                |($($arg,)*)| ::std::format!($lit),
             )
         );
-        $crate::__i18n_build!(@apply $mode $value; $($($rest)*)?);
+        $crate::__i18n_build!(@munch $mode $v $($($rest)*)?);
     };
 
-    (@apply $mode:ident $value:ident; $field:ident : $lit:literal $(, $($rest:tt)*)?) => {
-        $value.$field =
-            $crate::__i18n_wrap_expr!($mode $crate::I18NDynamicResourceValue::from($lit));
-        $crate::__i18n_build!(@apply $mode $value; $($($rest)*)?);
+    (@munch $mode:ident $v:ident $f:ident : $lit:literal $(, $($rest:tt)*)?) => {
+        $v.$f = $crate::__i18n_wrap_expr!($mode $crate::I18NDynamicResourceValue::from($lit));
+        $crate::__i18n_build!(@munch $mode $v $($($rest)*)?);
     };
 }
 
@@ -201,7 +159,7 @@ macro_rules! __i18n_build {
 /// field value so `deep-struct-update` can infer the right nested type.
 #[doc(hidden)]
 #[macro_export]
-macro_rules! i18n_build_value {
+macro_rules! __i18n_build_value {
     ($base:expr; $($body:tt)*) => {
         $crate::__i18n_build!(value $base; $($body)*)
     };
@@ -212,7 +170,7 @@ macro_rules! i18n_build_value {
 /// Leaves become `Some(resource)` while omitted fields stay `None`.
 #[doc(hidden)]
 #[macro_export]
-macro_rules! i18n_build_override {
+macro_rules! __i18n_build_override {
     ($base:expr; $($body:tt)*) => {
         $crate::__i18n_build!(option $base; $($body)*)
     };
@@ -238,16 +196,12 @@ macro_rules! define_i18n_fallback {
         $locale_key:ident
         $($body:tt)*
     ) => {
-        ::paste::paste! {
-            pub mod [<$root_type:snake>] {
-                $crate::__i18n_define_struct_tree!(value $root_type { $($body)* });
-                $crate::__i18n_define_struct_tree!(option [<$root_type Overrides>] { $($body)* });
-            }
+        $crate::__i18n_define_types!($root_type { $($body)* });
 
+        ::paste::paste! {
             impl $crate::I18NFallback for [<$root_type:snake>]::$root_type {
                 fn fallback() -> Self {
-                    $crate::__i18n_build!(
-                        value
+                    $crate::__i18n_build_value!(
                         <[<$root_type:snake>]::$root_type as ::core::default::Default>::default();
                         $($body)*
                     )
@@ -285,8 +239,7 @@ macro_rules! define_i18n {
     ) => {
         ::paste::paste! {
             pub fn [<$locale_key:lower>]() -> $base_i18n::Override {
-                $crate::__i18n_build!(
-                    option
+                $crate::__i18n_build_override!(
                     <$base_i18n::Override as ::core::default::Default>::default();
                     $($body)*
                 )
